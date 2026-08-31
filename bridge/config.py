@@ -20,6 +20,7 @@ class Config:
         self.auth_token: Optional[str] = os.environ.get("BRIDGE_AUTH_TOKEN", None)
         self.default_target: str = os.environ.get("BRIDGE_DEFAULT_TARGET", "auto")
         self.enable_legacy_paste: bool = os.environ.get("BRIDGE_ENABLE_LEGACY", "true").lower() in ("true", "1", "yes")
+        self.expose_lan: bool = os.environ.get("BRIDGE_EXPOSE_LAN", "false").lower() in ("true", "1", "yes")
         self.static_targets: Dict[str, Dict[str, Any]] = {}
         self.load_file_config()
 
@@ -38,6 +39,8 @@ class Config:
                         self.default_target = data["default_target"]
                     if "enable_legacy_paste" in data:
                         self.enable_legacy_paste = bool(data["enable_legacy_paste"])
+                    if "expose_lan" in data and not os.environ.get("BRIDGE_EXPOSE_LAN"):
+                        self.expose_lan = bool(data["expose_lan"])
                     if "targets" in data and isinstance(data["targets"], dict):
                         self.static_targets = data["targets"]
                     break

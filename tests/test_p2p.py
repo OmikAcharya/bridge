@@ -53,6 +53,10 @@ class TestP2PServerEndpoints(unittest.TestCase):
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
 
+    def setUp(self):
+        from bridge.server import BridgeRequestHandler
+        BridgeRequestHandler.p2p_manager = self.p2p_manager
+
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
@@ -81,3 +85,17 @@ class TestP2PServerEndpoints(unittest.TestCase):
         poll_data = json.loads(poll_res.read().decode("utf-8"))
         self.assertTrue(poll_data.get("success"))
         self.assertEqual(len(poll_data.get("messages")), 1)
+
+    def test_binding_default_and_exposed(self):
+        cfg_default = Config()
+        cfg_default.port = 8797
+        server_default = create_server(cfg_default, expose_lan=False)
+        self.assertEqual(server_default.server_address[0], "127.0.0.1")
+        server_default.server_close()
+
+        cfg_exposed = Config()
+        cfg_exposed.port = 8796
+        cfg_exposed.expose_lan = True
+        server_exposed = create_server(cfg_exposed, expose_lan=True)
+        self.assertEqual(server_exposed.server_address[0], "0.0.0.0")
+        server_exposed.server_close()

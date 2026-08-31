@@ -150,19 +150,35 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             color: var(--text-main);
         }
 
-        .p2p-badge {
+        .conn-badge {
             font-family: var(--font-mono);
             font-size: 9px;
             font-weight: 600;
-            color: var(--green);
-            background: rgba(34, 197, 94, 0.12);
-            border: 1px solid rgba(34, 197, 94, 0.3);
             border-radius: 4px;
             padding: 1px 5px;
             letter-spacing: 0.02em;
             display: inline-flex;
             align-items: center;
             gap: 3px;
+            transition: all 0.2s ease;
+        }
+
+        .conn-badge.p2p {
+            color: var(--green);
+            background: rgba(34, 197, 94, 0.12);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .conn-badge.lan {
+            color: var(--yellow);
+            background: rgba(234, 179, 8, 0.12);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .conn-badge.local {
+            color: var(--blue);
+            background: rgba(59, 130, 246, 0.12);
+            border: 1px solid rgba(59, 130, 246, 0.3);
         }
 
         .header-actions {
@@ -1009,7 +1025,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="title-group">
             <div id="statusDot" class="status-dot"></div>
             <span class="title">Prompt Bridge</span>
-            <div id="p2pBadge" class="p2p-badge" style="display: none;" title="P2P DataChannel Encrypted">🔒 P2P</div>
+            <div id="connBadge" class="conn-badge p2p" title="Connection Mode">🔒 P2P</div>
         </div>
         <div class="header-actions">
             <button id="historyBtn" class="btn-icon-subtle" title="Prompt History">
@@ -1765,21 +1781,46 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }
         }
 
-        // WebRTC P2P DataChannel Integration
+        // Connection Security & Mode Indicator
+        const connBadge = document.getElementById('connBadge');
         let peerConnection = null;
         let p2pDataChannel = null;
         let isP2PConnected = false;
-        const p2pBadge = document.getElementById('p2pBadge');
 
         const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
         const p2pRoom = hashParams.get('room');
         const p2pKey = hashParams.get('key');
 
+        function updateConnectionBadge() {
+            if (!connBadge) return;
+            const host = window.location.hostname;
+            if (isP2PConnected) {
+                connBadge.textContent = '🔒 P2P E2EE';
+                connBadge.className = 'conn-badge p2p';
+                connBadge.title = 'Direct End-to-End Encrypted WebRTC DataChannel';
+            } else if (p2pRoom) {
+                connBadge.textContent = '🔒 P2P (Pairing)';
+                connBadge.className = 'conn-badge p2p';
+                connBadge.title = 'Establishing P2P DataChannel...';
+            } else if (host === 'localhost' || host === '127.0.0.1') {
+                connBadge.textContent = '💻 Localhost';
+                connBadge.className = 'conn-badge local';
+                connBadge.title = 'Connected locally on Mac';
+            } else {
+                connBadge.textContent = '🌐 LAN Direct';
+                connBadge.className = 'conn-badge lan';
+                connBadge.title = 'Connected over Exposed LAN IP';
+            }
+        }
+
         if (p2pRoom && window.RTCPeerConnection) {
             initWebRTC(p2pRoom, p2pKey);
+        } else {
+            updateConnectionBadge();
         }
 
         async function initWebRTC(room, key) {
+            updateConnectionBadge();
             try {
                 const config = {
                     iceServers: [
@@ -1809,6 +1850,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 pollSignals(room, key);
             } catch (e) {
                 console.warn('P2P fallback to direct HTTP:', e);
+                updateConnectionBadge();
             }
         }
 
@@ -1816,11 +1858,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             p2pDataChannel = dc;
             p2pDataChannel.onopen = () => {
                 isP2PConnected = true;
-                if (p2pBadge) p2pBadge.style.display = 'inline-flex';
+                updateConnectionBadge();
             };
             p2pDataChannel.onclose = () => {
                 isP2PConnected = false;
-                if (p2pBadge) p2pBadge.style.display = 'none';
+                updateConnectionBadge();
             };
             p2pDataChannel.onmessage = (e) => {
                 try {
@@ -2267,7 +2309,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 self.close_connection = True
 
 
-def create_server(config: Optional[Config] = None, p2p_manager: Optional[P2PManager] = None) -> BridgeServer:
+def create_server(config: Optional[Config] = None, p2p_manager: Optional[P2PManager] = None, expose_lan: bool = False) -> BridgeServer:
     """Creates and configures the Prompt Bridge server instance."""
     if config is None:
         config = Config()
@@ -2280,14 +2322,18 @@ def create_server(config: Optional[Config] = None, p2p_manager: Optional[P2PMana
     BridgeRequestHandler.router = router
     BridgeRequestHandler.target_manager = target_manager
     BridgeRequestHandler.config = config
-    BridgeRequestHandler.p2p_manager = p2p_manager
+    if p2p_manager is not None:
+        BridgeRequestHandler.p2p_manager = p2p_manager
 
-    server = BridgeServer(("0.0.0.0", config.port), BridgeRequestHandler)
+    # By default, bind exclusively to localhost (127.0.0.1) for zero exposure.
+    # Only bind to 0.0.0.0 if expose_lan is explicitly declared True.
+    host = "0.0.0.0" if (expose_lan or config.expose_lan) else "127.0.0.1"
+    server = BridgeServer((host, config.port), BridgeRequestHandler)
     return server
 
 
-def run(port: Optional[int] = None, p2p: bool = True):
-    """Starts the Prompt Bridge HTTP server with P2P Zero-Exposure WebRTC pairing."""
+def run(port: Optional[int] = None, expose_lan: bool = False, p2p: bool = True):
+    """Starts the Prompt Bridge HTTP server with default P2P Zero-Exposure WebRTC pairing."""
     logging.basicConfig(
         level=logging.INFO,
         format="[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s",
@@ -2297,20 +2343,29 @@ def run(port: Optional[int] = None, p2p: bool = True):
     config = Config()
     if port:
         config.port = port
+    if expose_lan:
+        config.expose_lan = True
 
     lan_ip = get_lan_ip()
     mdns_host = get_mdns_hostname()
     p2p_manager = P2PManager() if p2p else None
-    server = create_server(config, p2p_manager=p2p_manager)
+    server = create_server(config, p2p_manager=p2p_manager, expose_lan=config.expose_lan)
 
-    print(f"\nPrompt Bridge running with direct Terminal Agent routing:")
-    print(f"  • Local:   http://localhost:{config.port}")
-    print(f"  • Phone:   http://{lan_ip}:{config.port}")
-    if mdns_host:
-        print(f"  • mDNS:    http://{mdns_host}:{config.port}")
+    if config.expose_lan:
+        print(f"\n🌐 Direct LAN IP Exposure Enabled (--expose-lan):")
+        print(f"  • Local:   http://localhost:{config.port}")
+        print(f"  • Phone:   http://{lan_ip}:{config.port}")
+        if mdns_host:
+            print(f"  • mDNS:    http://{mdns_host}:{config.port}\n")
+    else:
+        print(f"\n🔒 P2P Zero-Exposure Active (Default - Localhost Only):")
+        print(f"  • Local:   http://localhost:{config.port}")
+        print(f"  • Network: Zero listening ports on LAN / Public Wi-Fi")
+        print(f"  • Tip:     Pass --expose-lan to exclusively open port on LAN IP\n")
 
     if p2p_manager:
-        print(p2p_manager.get_pairing_banner(f"http://{lan_ip}:{config.port}"))
+        base_url = f"http://{lan_ip}:{config.port}" if config.expose_lan else f"http://localhost:{config.port}"
+        print(p2p_manager.get_pairing_banner(base_url))
 
     try:
         server.serve_forever()
