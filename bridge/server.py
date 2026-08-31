@@ -566,37 +566,31 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             transform: none;
         }
 
-        /* Terminal Activity Feedback - Minimalist Glass */
-        .activity-container {
-            background: rgba(18, 18, 22, 0.75);
+        /* Header Activity Pill */
+        .btn-activity-pill {
+            background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: var(--radius-sm);
-            padding: 8px 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            margin-top: 4px;
-            flex-shrink: 0;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-            transition: opacity 0.2s ease, transform 0.2s ease;
-        }
-
-        .keyboard-active .activity-container {
-            display: none;
-        }
-
-        .activity-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .activity-title-group {
+            border-radius: 20px;
+            height: 28px;
+            padding: 0 10px;
             display: flex;
             align-items: center;
             gap: 6px;
+            color: var(--text-main);
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .btn-activity-pill:active {
+            background: var(--surface-hover);
+            transform: scale(0.97);
+        }
+
+        .pill-arrow {
+            font-size: 10px;
+            opacity: 0.6;
         }
 
         .activity-dot {
@@ -613,15 +607,60 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             animation: pulse 1.5s infinite;
         }
 
-        .activity-title {
-            font-size: 10.5px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-muted);
+        /* Full Screen Activity Cockpit Modal */
+        .cockpit-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 100dvh;
+            background: #09090b;
+            z-index: 95;
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.98);
+            transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        .activity-controls {
+        .cockpit-modal.open {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+        }
+
+        .cockpit-header {
+            height: 48px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            background: rgba(18, 18, 22, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            flex-shrink: 0;
+        }
+
+        .cockpit-target-group {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .cockpit-target-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-main);
+            max-width: 130px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .cockpit-header-actions {
             display: flex;
             align-items: center;
             gap: 6px;
@@ -659,9 +698,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid rgba(255, 255, 255, 0.07);
             color: var(--text-muted);
-            width: 20px;
-            height: 20px;
-            border-radius: 5px;
+            width: 26px;
+            height: 26px;
+            border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -672,35 +711,137 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             background: rgba(255, 255, 255, 0.12);
         }
 
-        .activity-content {
-            background: rgba(0, 0, 0, 0.35);
-            border: 1px solid rgba(255, 255, 255, 0.04);
-            border-radius: 7px;
-            padding: 7px 9px;
-            min-height: 44px;
-            max-height: 80px;
+        .cockpit-activity-content {
+            flex: 1;
             overflow-y: auto;
-            font-size: 12px;
-            line-height: 1.45;
-            color: #e4e4e7;
+            padding: 14px;
+            font-size: 13px;
+            line-height: 1.55;
+            color: #f4f4f5;
             white-space: pre-wrap;
             word-break: break-word;
-            font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+            -webkit-overflow-scrolling: touch;
         }
 
-        .activity-content.raw-view {
+        .cockpit-activity-content.raw-view {
             font-family: var(--font-mono);
-            font-size: 10.5px;
+            font-size: 11px;
             color: #a1a1aa;
             white-space: pre;
             overflow-x: auto;
-            max-height: 100px;
+            background: #0d0d10;
         }
 
         .activity-empty {
             color: var(--text-muted);
-            font-size: 11px;
+            font-size: 12px;
             font-style: italic;
+        }
+
+        /* Bottom Dictation Dialogue Bar */
+        .cockpit-bottom-dock {
+            background: rgba(18, 18, 22, 0.95);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 8px 12px calc(8px + env(safe-area-inset-bottom)) 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .cockpit-quick-chips {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+            scrollbar-width: none;
+            padding-bottom: 2px;
+        }
+
+        .cockpit-quick-chips::-webkit-scrollbar {
+            display: none;
+        }
+
+        .chip-mini {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 500;
+            padding: 4px 9px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.1s ease;
+        }
+
+        .chip-mini:active {
+            background: var(--surface-hover);
+            color: var(--text-main);
+            transform: scale(0.96);
+        }
+
+        .chip-mini.danger {
+            color: #f87171;
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        .chip-mini.danger:active {
+            background: rgba(239, 68, 68, 0.15);
+        }
+
+        .cockpit-input-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        #cockpitPrompt {
+            flex: 1;
+            min-height: 38px;
+            max-height: 90px;
+            resize: none;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: var(--text-main);
+            font-size: 14px;
+            padding: 9px 12px;
+            font-family: inherit;
+            line-height: 1.35;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        #cockpitPrompt:focus {
+            border-color: var(--surface-border-focus);
+            background: rgba(255, 255, 255, 0.09);
+        }
+
+        .cockpit-send-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            border: none;
+            background: var(--accent);
+            color: var(--accent-text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: transform 0.1s ease, background 0.15s ease;
+        }
+
+        .cockpit-send-btn:active {
+            transform: scale(0.92);
+        }
+
+        .cockpit-send-btn.success {
+            background: var(--green);
+            color: white;
         }
 
         /* History Modal */
@@ -804,6 +945,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <span class="title">Prompt Bridge</span>
         </div>
         <div class="header-actions">
+            <button id="openCockpitBtn" class="btn-activity-pill" title="Open Full Activity & Dictation Cockpit">
+                <div id="headerAgentDot" class="activity-dot"></div>
+                <span id="headerAgentName">Live Log</span>
+                <span class="pill-arrow">↗</span>
+            </button>
             <button id="historyBtn" class="btn-icon-subtle" title="Prompt History">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -832,29 +978,63 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <span id="miniTargetPath">~/Developer/bridge</span>
     </div>
 
-    <!-- Terminal Activity Feedback Panel -->
-    <div id="activityContainer" class="activity-container">
-        <div class="activity-header">
-            <div class="activity-title-group">
-                <div id="agentStatusDot" class="activity-dot"></div>
-                <span class="activity-title">Activity</span>
+    <!-- Full-Screen Activity & Dictation Cockpit Modal -->
+    <div id="cockpitModal" class="cockpit-modal">
+        <!-- Cockpit Header -->
+        <div class="cockpit-header">
+            <div class="cockpit-target-group">
+                <div id="cockpitAgentDot" class="activity-dot"></div>
+                <span id="cockpitTargetTitle" class="cockpit-target-title">Terminal Monitor</span>
             </div>
-            <div class="activity-controls">
+            <div class="cockpit-header-actions">
                 <div class="mode-segmented">
                     <button type="button" id="pillUltra" class="mode-pill active">Ultra</button>
                     <button type="button" id="pillRaw" class="mode-pill">Raw</button>
                 </div>
-                <button id="refreshActivityBtn" class="btn-icon-micro" title="Refresh Output">
+                <button id="refreshCockpitBtn" class="btn-icon-micro" title="Refresh Output">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="23 4 23 10 17 10"></polyline>
                         <polyline points="1 20 1 14 7 14"></polyline>
                         <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                     </svg>
                 </button>
+                <button id="closeCockpitBtn" class="btn-icon-micro" title="Close Log View">✕</button>
             </div>
         </div>
-        <div id="activityContent" class="activity-content caveman-view">
-            <div class="activity-empty">Listening to terminal session...</div>
+
+        <!-- Scrollable Full-Height Activity / Log Content -->
+        <div id="cockpitActivityContent" class="cockpit-activity-content caveman-view">
+            <div class="activity-empty">Connecting to terminal session...</div>
+        </div>
+
+        <!-- Thin Bottom Dictation Dialogue Bar -->
+        <div class="cockpit-bottom-dock">
+            <!-- Compact Quick Actions -->
+            <div class="cockpit-quick-chips">
+                <button id="cockpitBtnEnter" class="chip-mini" title="Send Return">↵ Return</button>
+                <button id="cockpitBtnContinue" class="chip-mini" title="Send continue">Continue</button>
+                <button id="cockpitBtnYes" class="chip-mini" title="Send 'y'">Yes</button>
+                <button id="cockpitBtnNo" class="chip-mini" title="Send 'n'">No</button>
+                <button id="cockpitBtnInterrupt" class="chip-mini danger" title="Send Ctrl+C">Ctrl+C</button>
+            </div>
+
+            <!-- Single/Multi-line Thin Dictation Input Row -->
+            <div class="cockpit-input-row">
+                <textarea 
+                    id="cockpitPrompt" 
+                    placeholder="Dictate prompt with Wispr Flow..." 
+                    rows="1" 
+                    autocomplete="off" 
+                    autocorrect="on" 
+                    spellcheck="true"
+                ></textarea>
+                <button id="cockpitSendBtn" class="cockpit-send-btn" title="Send to Agent">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -950,11 +1130,27 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const btnNo = document.getElementById('btnNo');
         const btnInterrupt = document.getElementById('btnInterrupt');
 
-        const activityContent = document.getElementById('activityContent');
+        const openCockpitBtn = document.getElementById('openCockpitBtn');
+        const headerAgentDot = document.getElementById('headerAgentDot');
+        const headerAgentName = document.getElementById('headerAgentName');
+
+        const cockpitModal = document.getElementById('cockpitModal');
+        const cockpitAgentDot = document.getElementById('cockpitAgentDot');
+        const cockpitTargetTitle = document.getElementById('cockpitTargetTitle');
+        const cockpitActivityContent = document.getElementById('cockpitActivityContent');
+        const cockpitPrompt = document.getElementById('cockpitPrompt');
+        const cockpitSendBtn = document.getElementById('cockpitSendBtn');
+        const closeCockpitBtn = document.getElementById('closeCockpitBtn');
+        const refreshCockpitBtn = document.getElementById('refreshCockpitBtn');
+
+        const cockpitBtnEnter = document.getElementById('cockpitBtnEnter');
+        const cockpitBtnContinue = document.getElementById('cockpitBtnContinue');
+        const cockpitBtnYes = document.getElementById('cockpitBtnYes');
+        const cockpitBtnNo = document.getElementById('cockpitBtnNo');
+        const cockpitBtnInterrupt = document.getElementById('cockpitBtnInterrupt');
+
         const pillUltra = document.getElementById('pillUltra');
         const pillRaw = document.getElementById('pillRaw');
-        const agentStatusDot = document.getElementById('agentStatusDot');
-        const refreshActivityBtn = document.getElementById('refreshActivityBtn');
 
         let lastCleared = '';
         let availableTargets = [];
@@ -969,11 +1165,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             if (isCavemanUltra) {
                 pillUltra.classList.add('active');
                 pillRaw.classList.remove('active');
-                activityContent.className = 'activity-content caveman-view';
+                cockpitActivityContent.className = 'cockpit-activity-content caveman-view';
             } else {
                 pillRaw.classList.add('active');
                 pillUltra.classList.remove('active');
-                activityContent.className = 'activity-content raw-view';
+                cockpitActivityContent.className = 'cockpit-activity-content raw-view';
             }
         }
 
@@ -995,7 +1191,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             haptic(10);
         });
 
-        refreshActivityBtn.addEventListener('click', () => {
+        function autoResize(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+        }
+
+        function openCockpit() {
+            cockpitModal.classList.add('open');
+            cockpitPrompt.value = promptEl.value;
+            autoResize(cockpitPrompt);
+            fetchActivityTail();
+            haptic(10);
+        }
+
+        function closeCockpit() {
+            cockpitModal.classList.remove('open');
+            promptEl.value = cockpitPrompt.value;
+            updateMetrics();
+            haptic(10);
+        }
+
+        openCockpitBtn.addEventListener('click', openCockpit);
+        closeCockpitBtn.addEventListener('click', closeCockpit);
+        refreshCockpitBtn.addEventListener('click', () => {
             fetchActivityTail();
             haptic(10);
         });
@@ -1007,13 +1225,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 if (!res.ok) return;
                 const data = await res.json();
                 if (data.success && data.content) {
-                    activityContent.textContent = data.content;
+                    cockpitActivityContent.textContent = data.content;
                     if (data.is_busy) {
-                        agentStatusDot.classList.add('busy');
+                        headerAgentDot.classList.add('busy');
+                        cockpitAgentDot.classList.add('busy');
                     } else {
-                        agentStatusDot.classList.remove('busy');
+                        headerAgentDot.classList.remove('busy');
+                        cockpitAgentDot.classList.remove('busy');
                     }
-                    activityContent.scrollTop = activityContent.scrollHeight;
+                    if (data.target_name) {
+                        cockpitTargetTitle.textContent = data.target_name;
+                        headerAgentName.textContent = data.target_name.split('—')[0].trim();
+                    }
+                    cockpitActivityContent.scrollTop = cockpitActivityContent.scrollHeight;
                 }
             } catch (e) {}
         }
@@ -1078,12 +1302,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             metricsEl.textContent = `${words} ${words === 1 ? 'word' : 'words'} · ${chars} chars`;
         }
 
-        promptEl.addEventListener('input', updateMetrics);
+        promptEl.addEventListener('input', () => {
+            cockpitPrompt.value = promptEl.value;
+            autoResize(cockpitPrompt);
+            updateMetrics();
+        });
+
+        cockpitPrompt.addEventListener('input', () => {
+            promptEl.value = cockpitPrompt.value;
+            autoResize(cockpitPrompt);
+            updateMetrics();
+        });
 
         clearBtn.addEventListener('click', () => {
             if (!promptEl.value) return;
             lastCleared = promptEl.value;
             promptEl.value = '';
+            cockpitPrompt.value = '';
+            autoResize(cockpitPrompt);
             undoBtn.style.display = 'inline';
             updateMetrics();
             promptEl.focus();
@@ -1093,6 +1329,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         undoBtn.addEventListener('click', () => {
             if (!lastCleared) return;
             promptEl.value = lastCleared;
+            cockpitPrompt.value = lastCleared;
+            autoResize(cockpitPrompt);
             lastCleared = '';
             undoBtn.style.display = 'none';
             updateMetrics();
@@ -1319,23 +1557,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
                 haptic([30, 40, 30]);
                 sendBtn.classList.add('success');
+                cockpitSendBtn.classList.add('success');
                 sendTitle.textContent = 'Sent ✓';
                 sendSubtitle.textContent = data.message || 'Delivered directly to session';
 
                 if (customText === null) {
                     savePromptToHistory(text);
                     promptEl.value = '';
+                    cockpitPrompt.value = '';
+                    autoResize(cockpitPrompt);
                     undoBtn.style.display = 'none';
                     updateMetrics();
                 }
 
-                setTimeout(fetchActivityTail, 400);
+                setTimeout(fetchActivityTail, 350);
 
                 setTimeout(() => {
                     sendBtn.classList.remove('success');
+                    cockpitSendBtn.classList.remove('success');
                     sendBtn.disabled = false;
                     updateSendButtonLabel();
-                    promptEl.focus();
+                    if (!cockpitModal.classList.contains('open')) {
+                        promptEl.focus();
+                    }
                 }, 600);
 
             } catch (err) {
@@ -1366,6 +1610,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         attachInstantTap(btnYes, () => executePrompt('y', 'execute'));
         attachInstantTap(btnNo, () => executePrompt('n', 'execute'));
         attachInstantTap(btnInterrupt, () => executePrompt('', 'interrupt'));
+
+        // Cockpit Dock actions
+        attachInstantTap(cockpitSendBtn, () => executePrompt(null, null));
+        attachInstantTap(cockpitBtnEnter, () => executePrompt('', 'raw_enter'));
+        attachInstantTap(cockpitBtnContinue, () => executePrompt('continue', 'execute'));
+        attachInstantTap(cockpitBtnYes, () => executePrompt('y', 'execute'));
+        attachInstantTap(cockpitBtnNo, () => executePrompt('n', 'execute'));
+        attachInstantTap(cockpitBtnInterrupt, () => executePrompt('', 'interrupt'));
 
         window.addEventListener('keydown', (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
