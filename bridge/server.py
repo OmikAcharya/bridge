@@ -704,9 +704,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <button id="btnInterrupt" class="action-chip danger" title="Send Ctrl+C">
             <span>Ctrl+C</span>
         </button>
-        <button id="btnClearBar" class="action-chip" title="Clear text">
-            <span>Clear</span>
-        </button>
     </div>
 
     <!-- Send Button & Enter Toggle -->
@@ -758,7 +755,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const historyList = document.getElementById('historyList');
         const historyBtn = document.getElementById('historyBtn');
         const closeHistoryModal = document.getElementById('closeHistoryModal');
-        const btnClearBar = document.getElementById('btnClearBar');
         const btnEnterOnly = document.getElementById('btnEnterOnly');
         const btnContinue = document.getElementById('btnContinue');
         const btnYes = document.getElementById('btnYes');
@@ -1111,16 +1107,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             });
         }
 
-        function handleClearPrompt() {
-            if (!promptEl.value) return;
-            lastCleared = promptEl.value;
-            promptEl.value = '';
-            undoBtn.style.display = 'inline';
-            updateMetrics();
-            haptic(10);
-        }
-
-        attachInstantTap(btnClearBar, handleClearPrompt);
         attachInstantTap(sendBtn, () => executePrompt(null, null));
         attachInstantTap(btnEnterOnly, () => executePrompt('', 'raw_enter'));
         attachInstantTap(btnContinue, () => executePrompt('continue', 'execute'));
