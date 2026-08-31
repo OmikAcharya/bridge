@@ -16,8 +16,7 @@ from bridge.adapters.base import TerminalAdapter
 from bridge.adapters.terminal import AppleTerminalAdapter, escape_for_applescript
 from bridge.adapters.iterm import ITermAdapter
 from bridge.adapters.legacy import LegacyPasteAdapter
-from bridge.adapters.pty import PTYAdapter
-from bridge.adapters.factory import AdapterFactory
+from bridge.adapters.factory import AdapterFactory, get_adapter
 from bridge.router import PromptRouter
 from bridge.server import create_server
 

@@ -26,7 +26,7 @@ When dictating code or complex prompts from a mobile device (e.g., using Wispr F
 [Bridge Daemon (main.py)]
       ├── Discovery Engine (PIDs, TTYs, CWDs)
       ├── Target Router
-      └── Terminal Adapters (Terminal.app, iTerm2, PTY, Legacy)
+      └── Terminal Adapters (Terminal.app, iTerm2, Legacy Paste)
               |
               +---> Target Session 1 (Claude Code @ backend)
               +---> Target Session 2 (OpenCode @ frontend)
@@ -119,7 +119,6 @@ bridge/
 └── adapters/
     ├── terminal.py  # macOS Terminal.app background AppleScript adapter
     ├── iterm.py     # iTerm2 background IPC adapter
-    ├── pty.py       # Direct character device injection adapter
     └── legacy.py    # System Events clipboard paste fallback
 ```
 

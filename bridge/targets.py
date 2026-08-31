@@ -11,6 +11,23 @@ from bridge.discovery import SessionDiscovery
 from bridge.config import Config
 
 
+def _create_focused_target() -> Target:
+    return Target(
+        id="focused",
+        name="Focused Mac Application",
+        display_name="Focused Application (Active Window)",
+        agent="legacy",
+        agent_name="Focused App",
+        cwd="",
+        folder="",
+        tty="",
+        application="Active Window",
+        status="available",
+        is_busy=False,
+        adapter="LegacyPasteAdapter"
+    )
+
+
 class TargetManager:
     """Manages active terminal targets and resolves logical target names."""
 
@@ -44,21 +61,7 @@ class TargetManager:
 
         # 2. Add Focused Application fallback if enabled
         if self.config.enable_legacy_paste:
-            focused_target = Target(
-                id="focused",
-                name="Focused Mac Application",
-                display_name="Focused Application (Active Window)",
-                agent="legacy",
-                agent_name="Focused App",
-                cwd="",
-                folder="",
-                tty="",
-                application="Active Window",
-                status="available",
-                is_busy=False,
-                adapter="LegacyPasteAdapter"
-            )
-            targets.append(focused_target)
+            targets.append(_create_focused_target())
 
         return targets
 
@@ -70,20 +73,7 @@ class TargetManager:
             return self._resolve_auto()
 
         if target_id_or_alias in ("focused", "active", "legacy"):
-            return Target(
-                id="focused",
-                name="Focused Mac Application",
-                display_name="Focused Application (Active Window)",
-                agent="legacy",
-                agent_name="Focused App",
-                cwd="",
-                folder="",
-                tty="",
-                application="Active Window",
-                status="available",
-                is_busy=False,
-                adapter="LegacyPasteAdapter"
-            )
+            return _create_focused_target()
 
         # Fresh targets list
         targets = self.get_targets(force_refresh=True)

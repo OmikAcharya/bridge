@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# macOS artifacts
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Local / private configuration
+.bridge_config.json
+bridge_config.json
+
+# Test & build artifacts
+.pytest_cache/
+*.egg-info/
+dist/
+build/
