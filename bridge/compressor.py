@@ -2,7 +2,7 @@
 Caveman Ultra Output Compressor for Prompt Bridge.
 Transforms raw terminal session logs and agent output into:
 1. Raw Mode: Clean ANSI-stripped, formatted terminal output.
-2. Caveman Ultra Mode: Ultra-concise, telegraphic action summary (thoughts, tools, errors, concise answers).
+2. Caveman Ultra Mode: Dense, structured 3-line synthesis (State, Actions, Last Message).
 """
 
 import re
@@ -24,120 +24,125 @@ def clean_ansi(text: str) -> str:
     return text
 
 
-def compress_caveman_ultra(raw_text: str, max_items: int = 15) -> str:
+def compress_caveman_ultra(raw_text: str, max_items: int = 4) -> str:
     """
-    Compresses raw agent terminal output into Caveman Ultra format.
-    Preserves exact tools, thoughts, errors, and key response sentences while eliminating filler.
+    Synthesizes raw agent terminal output into high-density Caveman Ultra format.
+    Extracts:
+    - Current State & Active Step
+    - Compact summary of recent tool actions (deduplicated)
+    - Shortest decisive response sentence
     """
     cleaned = clean_ansi(raw_text)
-    raw_lines = [l.strip() for l in cleaned.splitlines()]
-    
-    # Filter out empty lines, decorative borders, and CLI footers
+    lines = [l.strip() for l in cleaned.splitlines() if l.strip()]
+
+    # Filter out noisy borders, prompts, and CLI footers
     filtered = []
-    for line in raw_lines:
-        if not line:
+    for l in lines:
+        if BORDER_REGEX.match(l):
             continue
-        if BORDER_REGEX.match(line):
+        if "esc to cancel" in l or "ctrl+o to expand" in l or "running command..." in l.lower():
             continue
-        if "esc to cancel" in line or "ctrl+o to expand" in line or "python3 main.py running" in line:
+        if l.startswith("Tip: Use /help") or l == ">":
             continue
-        if any(c in line for c in SPINNER_CHARS) and "Running command" in line:
-            continue
-        if line.startswith("Tip: Use /help") or line == ">":
-            continue
-        filtered.append(line)
+        filtered.append(l)
 
     if not filtered:
-        return "Terminal ready. No active output."
+        return "Terminal idle. Ready for prompt."
 
-    events = []
-    in_code_block = False
+    # Identify state
+    is_busy = False
+    if any("running" in l.lower() or "thought for" in l.lower() or "⣻" in l or "⣟" in l for l in filtered[-5:]):
+        is_busy = True
 
-    for line in filtered:
-        # Code fence tracking
-        if line.startswith("```"):
-            in_code_block = not in_code_block
-            events.append(line)
-            continue
-        if in_code_block:
-            events.append(line)
-            continue
+    edits = []
+    bash_cmds = []
+    last_thought = ""
+    response_lines = []
+    in_response = False
 
-        # 1. Thought block
-        if "▸ Thought for" in line or line.startswith("▸ Thought"):
-            match = re.search(r'Thought for ([\d\w\.]+)', line)
-            dur = match.group(1) if match else "awhile"
-            events.append(f"🧠 Thinking ({dur})")
+    for l in filtered:
+        if l.startswith("> "):
+            in_response = True
+            response_lines = []
             continue
 
-        # 2. Tool Calls
-        if line.startswith("● Bash(") or line.startswith("○ Bash("):
-            cmd = line[line.find("(")+1 : line.rfind(")")]
-            events.append(f"⚡ Bash: `{cmd}`" if cmd else "⚡ Executed command")
-            continue
-        if line.startswith("● Edit(") or line.startswith("○ Edit("):
-            target = line[line.find("(")+1 : line.rfind(")")]
-            short_target = target.split("/")[-1] if "/" in target else target
-            events.append(f"📝 Edit: `{short_target}`")
-            continue
-        if line.startswith("● Read(") or line.startswith("○ Read(") or line.startswith("● View(") or line.startswith("○ View("):
-            target = line[line.find("(")+1 : line.rfind(")")]
-            short_target = target.split("/")[-1] if "/" in target else target
-            events.append(f"📖 Read: `{short_target}`")
+        if "▸ Thought for" in l or "▸ Thought" in l:
+            m = re.search(r'Thought for ([\d\w\.]+)', l)
+            last_thought = f"Thought {m.group(1)}" if m else "Thinking"
             continue
 
-        # 3. Errors and failures
-        if "Error:" in line or "Traceback (" in line or "Exception" in line or "FAILED" in line:
-            events.append(f"❌ {line}")
+        if l.startswith("● Bash(") or l.startswith("○ Bash("):
+            cmd = l[l.find("(")+1 : l.rfind(")")]
+            if cmd and cmd not in bash_cmds:
+                bash_cmds.append(cmd)
             continue
 
-        # 4. User prompts
-        if line.startswith("> "):
-            prompt_text = line[2:].strip()
-            if prompt_text:
-                events.append(f"👤 Prompt: \"{prompt_text[:60]}{'...' if len(prompt_text) > 60 else ''}\"")
+        if l.startswith("● Edit(") or l.startswith("○ Edit("):
+            f = l[l.find("(")+1 : l.rfind(")")].split("/")[-1]
+            if f and f not in edits:
+                edits.append(f)
             continue
 
-        # 5. Success markers
-        if "OK" in line or "✓" in line or "passed" in line.lower():
-            if len(line) < 80:
-                events.append(f"✓ {line}")
-                continue
+        if l.startswith("● Read(") or l.startswith("○ Read(") or l.startswith("● View("):
+            continue
 
-        # 6. Regular prose / response text (apply Caveman compression)
-        compressed_line = _caveman_compress_line(line)
-        if compressed_line:
-            events.append(compressed_line)
+        if in_response:
+            if not l.startswith("●") and not l.startswith("○") and not l.startswith("▸"):
+                cl = _caveman_compress_line(l)
+                if cl and len(cl) > 2:
+                    response_lines.append(cl)
 
-    # De-duplicate consecutive identical items
-    deduped = []
-    for item in events:
-        if not deduped or deduped[-1] != item:
-            deduped.append(item)
+    output_lines = []
 
-    # Take recent items
-    recent = deduped[-max_items:]
-    return "\n".join(recent)
+    # 1. State / Current Action
+    if is_busy:
+        step = ""
+        if bash_cmds:
+            step = f" · Executing `{bash_cmds[-1][:32]}`"
+        elif edits:
+            step = f" · Editing `{edits[-1]}`"
+        elif last_thought:
+            step = f" · {last_thought}"
+        output_lines.append(f"● BUSY{step}")
+    else:
+        output_lines.append("● READY")
+
+    # 2. Key Actions (Combined into one concise line)
+    action_parts = []
+    if edits:
+        action_parts.append(f"Edits: {', '.join(edits[-3:])}")
+    if bash_cmds:
+        short_cmds = [c.split()[0] for c in bash_cmds[-2:]]
+        action_parts.append(f"Ran: {', '.join(short_cmds)}")
+    if action_parts:
+        output_lines.append(" · ".join(action_parts))
+
+    # 3. Last Response snippet (1-2 lines max)
+    if response_lines:
+        clean_resp = " ".join(response_lines[-2:])
+        if len(clean_resp) > 130:
+            clean_resp = clean_resp[:127] + "..."
+        output_lines.append(f"“{clean_resp}”")
+
+    return "\n".join(output_lines) if output_lines else "Session ready."
 
 
 def _caveman_compress_line(line: str) -> str:
     """Applies Caveman word-level compression to non-code prose."""
-    if len(line) < 3:
-        return ""
+    t = re.sub(r'^[•\-\*]\s*', '', line)
+    t = re.sub(r'#+\s*', '', t)
     
     # Drop pleasantries & filler
     fillers = [
         r"\b(basically|actually|simply|just|certainly|sure|of course|happy to|please note that)\b",
-        r"\b(the following changes were made|as you can see|in order to|i have)\b",
+        r"\b(the following changes were made|as you can see|in order to|i have|we have)\b",
         r"\b(a|an|the)\b",
     ]
-    compressed = line
     for pat in fillers:
-        compressed = re.sub(pat, "", compressed, flags=re.IGNORECASE)
+        t = re.sub(pat, "", t, flags=re.IGNORECASE)
 
-    # Clean up double spaces
-    compressed = re.sub(r'\s+', ' ', compressed).strip()
-    return compressed
+    t = re.sub(r'\s+', ' ', t).strip()
+    return t
 
 
 def format_raw_tail(raw_text: str, lines: int = 35) -> str:

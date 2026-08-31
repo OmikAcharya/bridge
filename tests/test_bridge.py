@@ -276,11 +276,10 @@ class TestCavemanCompressor(unittest.TestCase):
         ✓ 18 passed in 1.2s
         """
         compressed = compress_caveman_ultra(sample_log)
-        self.assertIn("🧠 Thinking (4s)", compressed)
-        self.assertIn("⚡ Bash: `pytest tests/`", compressed)
-        self.assertIn("📝 Edit: `server.py`", compressed)
-        self.assertIn("📖 Read: `models.py`", compressed)
-        self.assertIn("✓ 18 passed in 1.2s", compressed)
+        self.assertIn("Edits: server.py", compressed)
+        self.assertIn("Ran: pytest", compressed)
+        self.assertIn("18 passed", compressed)
+
 
 
 if __name__ == "__main__":

@@ -543,18 +543,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             transform: none;
         }
 
-        /* Terminal Activity Closed-Loop Feedback */
+        /* Terminal Activity Feedback - Minimalist Glass */
         .activity-container {
-            background: var(--surface);
-            border: 1px solid var(--surface-border);
+            background: rgba(18, 18, 22, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: var(--radius-sm);
-            padding: 9px 12px;
+            padding: 8px 12px;
             display: flex;
             flex-direction: column;
-            gap: 7px;
+            gap: 6px;
             margin-top: 4px;
             flex-shrink: 0;
-            transition: max-height 0.2s ease, opacity 0.2s ease;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+            transition: opacity 0.2s ease, transform 0.2s ease;
         }
 
         .keyboard-active .activity-container {
@@ -583,51 +586,59 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         .activity-dot.busy {
             background: var(--blue);
-            box-shadow: 0 0 6px rgba(59, 130, 246, 0.4);
+            box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
             animation: pulse 1.5s infinite;
         }
 
         .activity-title {
-            font-size: 11px;
-            font-weight: 600;
+            font-size: 10.5px;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.06em;
             color: var(--text-muted);
         }
 
         .activity-controls {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }
 
-        .mini-toggle {
-            font-size: 11px;
+        /* Segmented Mode Pill */
+        .mode-segmented {
+            display: flex;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            padding: 2px;
+            gap: 2px;
+        }
+
+        .mode-pill {
+            background: transparent;
+            border: none;
             color: var(--text-muted);
-            gap: 5px;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s ease;
         }
 
-        .mini-toggle .toggle-switch {
-            width: 28px;
-            height: 16px;
-        }
-
-        .mini-toggle .toggle-switch::after {
-            width: 12px;
-            height: 12px;
-        }
-
-        .mini-toggle input:checked + .toggle-switch::after {
-            transform: translateX(12px);
+        .mode-pill.active {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
         }
 
         .btn-icon-micro {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--surface-border);
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.07);
             color: var(--text-muted);
-            width: 22px;
-            height: 22px;
-            border-radius: 6px;
+            width: 20px;
+            height: 20px;
+            border-radius: 5px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -635,35 +646,38 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .btn-icon-micro:active {
-            background: var(--surface-hover);
+            background: rgba(255, 255, 255, 0.12);
         }
 
         .activity-content {
-            background: rgba(0, 0, 0, 0.45);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            padding: 8px 10px;
-            max-height: 130px;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 7px;
+            padding: 7px 9px;
+            min-height: 44px;
+            max-height: 80px;
             overflow-y: auto;
             font-size: 12px;
             line-height: 1.45;
-            color: var(--text-main);
+            color: #e4e4e7;
             white-space: pre-wrap;
             word-break: break-word;
+            font-feature-settings: "cv02", "cv03", "cv04", "cv11";
         }
 
         .activity-content.raw-view {
             font-family: var(--font-mono);
-            font-size: 11px;
-            color: #d4d4d8;
+            font-size: 10.5px;
+            color: #a1a1aa;
             white-space: pre;
             overflow-x: auto;
+            max-height: 100px;
         }
 
         .activity-empty {
             color: var(--text-muted);
-            font-style: italic;
             font-size: 11px;
+            font-style: italic;
         }
 
         /* History Modal */
@@ -800,14 +814,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="activity-header">
             <div class="activity-title-group">
                 <div id="agentStatusDot" class="activity-dot"></div>
-                <span class="activity-title">Live Agent Activity</span>
+                <span class="activity-title">Activity</span>
             </div>
             <div class="activity-controls">
-                <label class="toggle-label mini-toggle">
-                    <input type="checkbox" id="cavemanModeToggle" checked>
-                    <span class="toggle-switch"></span>
-                    <span id="cavemanModeLabel">Caveman Ultra</span>
-                </label>
+                <div class="mode-segmented">
+                    <button type="button" id="pillUltra" class="mode-pill active">Ultra</button>
+                    <button type="button" id="pillRaw" class="mode-pill">Raw</button>
+                </div>
                 <button id="refreshActivityBtn" class="btn-icon-micro" title="Refresh Output">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="23 4 23 10 17 10"></polyline>
@@ -915,8 +928,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const btnInterrupt = document.getElementById('btnInterrupt');
 
         const activityContent = document.getElementById('activityContent');
-        const cavemanModeToggle = document.getElementById('cavemanModeToggle');
-        const cavemanModeLabel = document.getElementById('cavemanModeLabel');
+        const pillUltra = document.getElementById('pillUltra');
+        const pillRaw = document.getElementById('pillRaw');
         const agentStatusDot = document.getElementById('agentStatusDot');
         const refreshActivityBtn = document.getElementById('refreshActivityBtn');
 
@@ -927,15 +940,34 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let lastSignature = '';
 
         let isCavemanUltra = localStorage.getItem('bridge_caveman_output') !== 'false';
-        cavemanModeToggle.checked = isCavemanUltra;
-        cavemanModeLabel.textContent = isCavemanUltra ? 'Caveman Ultra' : 'Raw Output';
-        activityContent.className = isCavemanUltra ? 'activity-content caveman-view' : 'activity-content raw-view';
+        updateModeUI();
 
-        cavemanModeToggle.addEventListener('change', () => {
-            isCavemanUltra = cavemanModeToggle.checked;
-            localStorage.setItem('bridge_caveman_output', isCavemanUltra);
-            cavemanModeLabel.textContent = isCavemanUltra ? 'Caveman Ultra' : 'Raw Output';
-            activityContent.className = isCavemanUltra ? 'activity-content caveman-view' : 'activity-content raw-view';
+        function updateModeUI() {
+            if (isCavemanUltra) {
+                pillUltra.classList.add('active');
+                pillRaw.classList.remove('active');
+                activityContent.className = 'activity-content caveman-view';
+            } else {
+                pillRaw.classList.add('active');
+                pillUltra.classList.remove('active');
+                activityContent.className = 'activity-content raw-view';
+            }
+        }
+
+        pillUltra.addEventListener('click', () => {
+            if (isCavemanUltra) return;
+            isCavemanUltra = true;
+            localStorage.setItem('bridge_caveman_output', 'true');
+            updateModeUI();
+            fetchActivityTail();
+            haptic(10);
+        });
+
+        pillRaw.addEventListener('click', () => {
+            if (!isCavemanUltra) return;
+            isCavemanUltra = false;
+            localStorage.setItem('bridge_caveman_output', 'false');
+            updateModeUI();
             fetchActivityTail();
             haptic(10);
         });
