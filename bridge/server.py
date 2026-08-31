@@ -1149,9 +1149,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 class BridgeServer(ThreadingHTTPServer):
-    """Threading HTTP server with graceful client disconnect handling."""
+    """Threading HTTP server with graceful client disconnect handling and TCP_NODELAY."""
     daemon_threads = True
     allow_reuse_address = True
+
+    def get_request(self):
+        sock, addr = super().get_request()
+        try:
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except Exception:
+            pass
+        return sock, addr
 
     def handle_error(self, request, client_address):
         """Suppress noisy tracebacks for normal socket disconnects/resets."""

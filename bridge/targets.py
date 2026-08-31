@@ -68,6 +68,7 @@ class TargetManager:
     def resolve(self, target_id_or_alias: str) -> Optional[Target]:
         """
         Resolves a logical target ID, alias, TTY, or 'auto'/'focused' to an active Target.
+        Uses warm cache first to avoid blocking prompt delivery.
         """
         if not target_id_or_alias or target_id_or_alias == "auto":
             return self._resolve_auto()
@@ -75,35 +76,40 @@ class TargetManager:
         if target_id_or_alias in ("focused", "active", "legacy"):
             return _create_focused_target()
 
-        # Fresh targets list
-        targets = self.get_targets(force_refresh=True)
+        # 1. Try warm cached targets first (0ms latency)
+        target = self._find_target(self.get_targets(force_refresh=False), target_id_or_alias)
+        if target:
+            return target
 
+        # 2. Cold-start fallback: refresh once if not in cache
+        return self._find_target(self.get_targets(force_refresh=True), target_id_or_alias)
+
+    def _find_target(self, targets: List[Target], query: str) -> Optional[Target]:
         # 1. Exact ID match
         for t in targets:
-            if t.id == target_id_or_alias:
+            if t.id == query:
                 return t
 
         # 2. Alias match from metadata
         for t in targets:
-            if t.metadata.get("alias_id") == target_id_or_alias:
+            if t.metadata.get("alias_id") == query:
                 return t
 
         # 3. TTY match (e.g. "/dev/ttys001" or "ttys001")
-        clean_tty = target_id_or_alias if target_id_or_alias.startswith("/dev/") else f"/dev/{target_id_or_alias}"
+        clean_tty = query if query.startswith("/dev/") else f"/dev/{query}"
         for t in targets:
-            if t.tty == clean_tty or t.tty == target_id_or_alias:
+            if t.tty == clean_tty or t.tty == query:
                 return t
 
         # 4. Folder / CWD / Name match
-        lower_query = target_id_or_alias.lower()
+        lower_query = query.lower()
         for t in targets:
             if t.folder.lower() == lower_query or t.name.lower() == lower_query:
                 return t
 
-        # 5. Check static config for predefined target even if not yet mapped
-        static_cfg = self.config.get_static_target(target_id_or_alias)
+        # 5. Check static config for predefined target
+        static_cfg = self.config.get_static_target(query)
         if static_cfg:
-            # Try to match static config properties against active sessions
             target_cwd = os.path.abspath(os.path.expanduser(static_cfg.get("cwd", ""))) if static_cfg.get("cwd") else ""
             target_agent = static_cfg.get("agent", "").lower()
             for t in targets:
@@ -115,8 +121,10 @@ class TargetManager:
         return None
 
     def _resolve_auto(self) -> Optional[Target]:
-        """Picks the most relevant active target automatically."""
-        targets = self.get_targets(force_refresh=True)
+        """Picks the most relevant active target automatically using warm cache."""
+        targets = self.get_targets(force_refresh=False)
+        if not targets:
+            targets = self.get_targets(force_refresh=True)
         if not targets:
             return None
 

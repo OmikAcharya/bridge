@@ -40,24 +40,35 @@ class AppleTerminalAdapter(TerminalAdapter):
         tty = target.tty
         win_idx = target.win_idx
         tab_idx = target.tab_idx
+        tab_finder = f'''
+        set foundTab to missing value
+        if {win_idx if win_idx else 0} > 0 and {tab_idx if tab_idx else 0} > 0 then
+            try
+                set candTab to tab {tab_idx} of window {win_idx}
+                if "{tty}" is "" or tty of candTab is "{tty}" then
+                    set foundTab to candTab
+                end if
+            end try
+        end if
+        if foundTab is missing value and "{tty}" is not "" then
+            repeat with w in windows
+                repeat with t in tabs of w
+                    if tty of t is "{tty}" then
+                        set foundTab to t
+                        exit repeat
+                    end if
+                end repeat
+                if foundTab is not missing value then exit repeat
+            end repeat
+        end if
+        '''
 
         # Check action mode
         if action == "interrupt" or text == "\x03":
             action_desc = "Interrupt (Ctrl+C)"
             script = f'''
             tell application "Terminal"
-                set foundTab to missing value
-                if "{tty}" is not "" then
-                    repeat with w in windows
-                        repeat with t in tabs of w
-                            if tty of t is "{tty}" then
-                                set foundTab to t
-                                exit repeat
-                            end if
-                        end repeat
-                        if foundTab is not missing value then exit repeat
-                    end repeat
-                end if
+                {tab_finder}
                 if foundTab is not missing value then
                     do script (ASCII character 3) in foundTab
                     return "OK"
@@ -70,18 +81,7 @@ class AppleTerminalAdapter(TerminalAdapter):
             action_desc = "Return (Enter)"
             script = f'''
             tell application "Terminal"
-                set foundTab to missing value
-                if "{tty}" is not "" then
-                    repeat with w in windows
-                        repeat with t in tabs of w
-                            if tty of t is "{tty}" then
-                                set foundTab to t
-                                exit repeat
-                            end if
-                        end repeat
-                        if foundTab is not missing value then exit repeat
-                    end repeat
-                end if
+                {tab_finder}
                 if foundTab is not missing value then
                     do script "" in foundTab
                     return "OK"
@@ -107,21 +107,7 @@ class AppleTerminalAdapter(TerminalAdapter):
 
             script = f'''
             tell application "Terminal"
-                set foundTab to missing value
-                if "{tty}" is not "" then
-                    repeat with w in windows
-                        repeat with t in tabs of w
-                            if tty of t is "{tty}" then
-                                set foundTab to t
-                                set selected tab of w to t
-                                set index of w to 1
-                                exit repeat
-                            end if
-                        end repeat
-                        if foundTab is not missing value then exit repeat
-                    end repeat
-                end if
-                
+                {tab_finder}
                 if foundTab is not missing value then
                     activate
                     tell application "System Events"
@@ -139,30 +125,7 @@ class AppleTerminalAdapter(TerminalAdapter):
             escaped_text = escape_for_applescript(text)
             script = f'''
             tell application "Terminal"
-                set foundTab to missing value
-                
-                -- Method 1: Find by exact TTY
-                if "{tty}" is not "" then
-                    repeat with w in windows
-                        repeat with t in tabs of w
-                            if tty of t is "{tty}" then
-                                set foundTab to t
-                                exit repeat
-                            end if
-                        end repeat
-                        if foundTab is not missing value then
-                            exit repeat
-                        end if
-                    end repeat
-                end if
-                
-                -- Method 2: Fallback to window/tab index if TTY not found
-                if foundTab is missing value and {win_idx if win_idx else 0} > 0 and {tab_idx if tab_idx else 0} > 0 then
-                    try
-                        set foundTab to tab {tab_idx} of window {win_idx}
-                    end try
-                end if
-                
+                {tab_finder}
                 if foundTab is not missing value then
                     do script "{escaped_text}" in foundTab
                     return "OK"
