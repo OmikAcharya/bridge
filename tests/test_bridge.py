@@ -263,5 +263,24 @@ class TestPromptRouter(unittest.TestCase):
         self.assertIn("could not be resolved", res.error)
 
 
+class TestCavemanCompressor(unittest.TestCase):
+    def test_compress_ultra_actions(self):
+        from bridge.compressor import compress_caveman_ultra, clean_ansi
+        sample_log = """
+        \x1b[32m> Run unit tests\x1b[0m
+        ▸ Thought for 4s, 500 tokens
+        Thinking about how to structure tests...
+        ● Bash(pytest tests/)
+        ● Edit(/path/to/server.py)
+        ● Read(/path/to/models.py)
+        ✓ 18 passed in 1.2s
+        """
+        compressed = compress_caveman_ultra(sample_log)
+        self.assertIn("Edits: server.py", compressed)
+        self.assertIn("Ran: pytest", compressed)
+        self.assertIn("18 passed", compressed)
+
+
+
 if __name__ == "__main__":
     unittest.main()

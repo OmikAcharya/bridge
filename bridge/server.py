@@ -7,6 +7,7 @@ import os
 import json
 import socket
 import logging
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import Optional
 
@@ -14,8 +15,9 @@ from bridge.models import PromptRequest, DeliveryResult
 from bridge.config import Config
 from bridge.discovery import SessionDiscovery
 from bridge.targets import TargetManager
-from bridge.adapters.factory import AdapterFactory
+from bridge.adapters.factory import AdapterFactory, get_adapter
 from bridge.router import PromptRouter
+from bridge.compressor import compress_caveman_ultra, format_raw_tail
 
 logger = logging.getLogger("PromptBridge.Server")
 
@@ -338,6 +340,83 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             font-size: 14px;
         }
 
+        /* Standalone Live Activity Banner */
+        .activity-banner-btn {
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 12px;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            margin-bottom: 8px;
+            flex-shrink: 0;
+            user-select: none;
+            transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+        }
+
+        .activity-banner-btn:active {
+            background: var(--surface-hover);
+            border-color: var(--surface-border-focus);
+            transform: scale(0.985);
+        }
+
+        .keyboard-active .activity-banner-btn {
+            display: none;
+        }
+
+        .banner-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .banner-text-group {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+        }
+
+        .banner-agent-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 160px;
+        }
+
+        .banner-status-tag {
+            font-size: 10px;
+            font-family: var(--font-mono);
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--surface-border);
+            padding: 2px 6px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .banner-right {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: var(--text-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            flex-shrink: 0;
+        }
+
+        .banner-arrow {
+            font-size: 11px;
+            color: var(--text-main);
+        }
+
         /* Editor Area */
         .editor-container {
             flex: 1;
@@ -345,7 +424,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             flex-direction: column;
             background: var(--surface);
             border: 1px solid var(--surface-border);
-            border-radius: 14px;
+            border-radius: 12px;
             overflow: hidden;
             transition: border-color 0.15s ease;
             min-height: 80px;
@@ -564,6 +643,257 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             transform: none;
         }
 
+        .activity-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            flex-shrink: 0;
+        }
+
+        .activity-dot.busy {
+            background: var(--blue);
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Full Screen Activity Cockpit Modal */
+        .cockpit-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 100dvh;
+            background: var(--bg);
+            z-index: 95;
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.99);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+
+        .cockpit-modal.open {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+        }
+
+        .cockpit-header {
+            height: 48px;
+            border-bottom: 1px solid var(--surface-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            background: var(--surface);
+            flex-shrink: 0;
+        }
+
+        .cockpit-target-group {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+        }
+
+        .cockpit-target-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 150px;
+        }
+
+        .cockpit-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Segmented Mode Pill */
+        .mode-segmented {
+            display: flex;
+            background: var(--bg);
+            border: 1px solid var(--surface-border);
+            border-radius: 6px;
+            padding: 2px;
+            gap: 2px;
+        }
+
+        .mode-pill {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 10px;
+            font-family: var(--font-mono);
+            font-weight: 500;
+            padding: 2px 7px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.12s ease;
+        }
+
+        .mode-pill.active {
+            background: var(--surface-hover);
+            color: var(--text-main);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+        }
+
+        .btn-icon-micro {
+            background: var(--surface-hover);
+            border: 1px solid var(--surface-border);
+            color: var(--text-muted);
+            width: 26px;
+            height: 26px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.12s ease;
+        }
+
+        .btn-icon-micro:active {
+            color: var(--text-main);
+            border-color: var(--surface-border-focus);
+        }
+
+        .cockpit-activity-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px;
+            font-size: 13px;
+            line-height: 1.55;
+            color: var(--text-main);
+            white-space: pre-wrap;
+            word-break: break-word;
+            -webkit-overflow-scrolling: touch;
+            background: var(--bg);
+        }
+
+        .cockpit-activity-content.raw-view {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: pre;
+            overflow-x: auto;
+        }
+
+        .activity-empty {
+            color: var(--text-dim);
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-style: italic;
+        }
+
+        /* Bottom Dictation Dialogue Bar */
+        .cockpit-bottom-dock {
+            background: var(--surface);
+            border-top: 1px solid var(--surface-border);
+            padding: 8px 12px calc(8px + env(safe-area-inset-bottom)) 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .cockpit-quick-chips {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+            scrollbar-width: none;
+            padding-bottom: 2px;
+        }
+
+        .cockpit-quick-chips::-webkit-scrollbar {
+            display: none;
+        }
+
+        .chip-mini {
+            background: var(--surface-hover);
+            border: 1px solid var(--surface-border);
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-size: 11px;
+            font-family: var(--font-sans);
+            font-weight: 500;
+            padding: 4px 9px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.1s ease;
+        }
+
+        .chip-mini:active {
+            background: var(--surface-active);
+            color: var(--text-main);
+            transform: scale(0.96);
+        }
+
+        .chip-mini.danger {
+            color: #f87171;
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        .chip-mini.danger:active {
+            background: rgba(239, 68, 68, 0.15);
+        }
+
+        .cockpit-input-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        #cockpitPrompt {
+            flex: 1;
+            min-height: 38px;
+            max-height: 90px;
+            resize: none;
+            background: var(--bg);
+            border: 1px solid var(--surface-border);
+            border-radius: 10px;
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            font-size: 14px;
+            padding: 9px 12px;
+            line-height: 1.35;
+            outline: none;
+            transition: border-color 0.15s ease;
+        }
+
+        #cockpitPrompt:focus {
+            border-color: var(--surface-border-focus);
+        }
+
+        .cockpit-send-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            border: none;
+            background: var(--accent);
+            color: var(--accent-text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: transform 0.1s ease, background 0.15s ease;
+        }
+
+        .cockpit-send-btn:active {
+            transform: scale(0.92);
+        }
+
+        .cockpit-send-btn.success {
+            background: var(--green);
+            color: white;
+        }
+
         /* History Modal */
         .modal-overlay {
             position: fixed;
@@ -693,6 +1023,81 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <span id="miniTargetPath">~/Developer/bridge</span>
     </div>
 
+    <!-- Full-Screen Activity & Dictation Cockpit Modal -->
+    <div id="cockpitModal" class="cockpit-modal">
+        <!-- Cockpit Header -->
+        <div class="cockpit-header">
+            <div class="cockpit-target-group">
+                <div id="cockpitAgentDot" class="activity-dot"></div>
+                <span id="cockpitTargetTitle" class="cockpit-target-title">Terminal Monitor</span>
+            </div>
+            <div class="cockpit-header-actions">
+                <div class="mode-segmented">
+                    <button type="button" id="pillUltra" class="mode-pill active">Ultra</button>
+                    <button type="button" id="pillRaw" class="mode-pill">Raw</button>
+                </div>
+                <button id="refreshCockpitBtn" class="btn-icon-micro" title="Refresh Output">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                </button>
+                <button id="closeCockpitBtn" class="btn-icon-micro" title="Close Log View">✕</button>
+            </div>
+        </div>
+
+        <!-- Scrollable Full-Height Activity / Log Content -->
+        <div id="cockpitActivityContent" class="cockpit-activity-content caveman-view">
+            <div class="activity-empty">Connecting to terminal session...</div>
+        </div>
+
+        <!-- Thin Bottom Dictation Dialogue Bar -->
+        <div class="cockpit-bottom-dock">
+            <!-- Compact Quick Actions -->
+            <div class="cockpit-quick-chips">
+                <button id="cockpitBtnEnter" class="chip-mini" title="Send Return">↵ Return</button>
+                <button id="cockpitBtnContinue" class="chip-mini" title="Send continue">Continue</button>
+                <button id="cockpitBtnYes" class="chip-mini" title="Send 'y'">Yes</button>
+                <button id="cockpitBtnNo" class="chip-mini" title="Send 'n'">No</button>
+                <button id="cockpitBtnInterrupt" class="chip-mini danger" title="Send Ctrl+C">Ctrl+C</button>
+            </div>
+
+            <!-- Single/Multi-line Thin Dictation Input Row -->
+            <div class="cockpit-input-row">
+                <textarea 
+                    id="cockpitPrompt" 
+                    placeholder="Dictate prompt with Wispr Flow..." 
+                    rows="1" 
+                    autocomplete="off" 
+                    autocorrect="on" 
+                    spellcheck="true"
+                ></textarea>
+                <button id="cockpitSendBtn" class="cockpit-send-btn" title="Send to Agent">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Standalone Live Activity Banner (Matches Bento Card & Editor border radius and surface tokens) -->
+    <button id="openCockpitBtn" class="activity-banner-btn" title="Open Full Live Terminal Cockpit">
+        <div class="banner-left">
+            <div id="headerAgentDot" class="activity-dot"></div>
+            <div class="banner-text-group">
+                <span id="headerAgentName" class="banner-agent-name">Antigravity — bridge</span>
+                <span id="headerAgentStatus" class="banner-status-tag">Live Log ↗</span>
+            </div>
+        </div>
+        <div class="banner-right">
+            <span class="banner-hint">View Terminal</span>
+            <span class="banner-arrow">↗</span>
+        </div>
+    </button>
+
     <!-- Editor -->
     <div class="editor-container">
         <textarea 
@@ -785,11 +1190,135 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const btnNo = document.getElementById('btnNo');
         const btnInterrupt = document.getElementById('btnInterrupt');
 
+        const openCockpitBtn = document.getElementById('openCockpitBtn');
+        const headerAgentDot = document.getElementById('headerAgentDot');
+        const headerAgentName = document.getElementById('headerAgentName');
+        const headerAgentStatus = document.getElementById('headerAgentStatus');
+
+        const cockpitModal = document.getElementById('cockpitModal');
+        const cockpitAgentDot = document.getElementById('cockpitAgentDot');
+        const cockpitTargetTitle = document.getElementById('cockpitTargetTitle');
+        const cockpitActivityContent = document.getElementById('cockpitActivityContent');
+        const cockpitPrompt = document.getElementById('cockpitPrompt');
+        const cockpitSendBtn = document.getElementById('cockpitSendBtn');
+        const closeCockpitBtn = document.getElementById('closeCockpitBtn');
+        const refreshCockpitBtn = document.getElementById('refreshCockpitBtn');
+
+        const cockpitBtnEnter = document.getElementById('cockpitBtnEnter');
+        const cockpitBtnContinue = document.getElementById('cockpitBtnContinue');
+        const cockpitBtnYes = document.getElementById('cockpitBtnYes');
+        const cockpitBtnNo = document.getElementById('cockpitBtnNo');
+        const cockpitBtnInterrupt = document.getElementById('cockpitBtnInterrupt');
+
+        const pillUltra = document.getElementById('pillUltra');
+        const pillRaw = document.getElementById('pillRaw');
+
         let lastCleared = '';
         let availableTargets = [];
         let selectedTargetId = localStorage.getItem('bridge_target_id') || 'auto';
         let promptHistory = JSON.parse(localStorage.getItem('bridge_prompt_history') || '[]');
         let lastSignature = '';
+
+        let isCavemanUltra = localStorage.getItem('bridge_caveman_output') !== 'false';
+        updateModeUI();
+
+        function updateModeUI() {
+            if (isCavemanUltra) {
+                pillUltra.classList.add('active');
+                pillRaw.classList.remove('active');
+                cockpitActivityContent.className = 'cockpit-activity-content caveman-view';
+            } else {
+                pillRaw.classList.add('active');
+                pillUltra.classList.remove('active');
+                cockpitActivityContent.className = 'cockpit-activity-content raw-view';
+            }
+        }
+
+        pillUltra.addEventListener('click', () => {
+            if (isCavemanUltra) return;
+            isCavemanUltra = true;
+            localStorage.setItem('bridge_caveman_output', 'true');
+            updateModeUI();
+            fetchActivityTail();
+            haptic(10);
+        });
+
+        pillRaw.addEventListener('click', () => {
+            if (!isCavemanUltra) return;
+            isCavemanUltra = false;
+            localStorage.setItem('bridge_caveman_output', 'false');
+            updateModeUI();
+            fetchActivityTail();
+            haptic(10);
+        });
+
+        function autoResize(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+        }
+
+        function openCockpit() {
+            cockpitModal.classList.add('open');
+            cockpitPrompt.value = promptEl.value;
+            autoResize(cockpitPrompt);
+            fetchActivityTail();
+            haptic(10);
+        }
+
+        function closeCockpit() {
+            cockpitModal.classList.remove('open');
+            promptEl.value = cockpitPrompt.value;
+            updateMetrics();
+            haptic(10);
+        }
+
+        openCockpitBtn.addEventListener('click', openCockpit);
+        closeCockpitBtn.addEventListener('click', closeCockpit);
+        refreshCockpitBtn.addEventListener('click', () => {
+            fetchActivityTail();
+            haptic(10);
+        });
+
+        let activityAbortController = null;
+
+        async function fetchActivityTail() {
+            if (activityAbortController) {
+                activityAbortController.abort();
+            }
+            activityAbortController = new AbortController();
+
+            try {
+                const targetId = selectedTargetId;
+                const mode = isCavemanUltra ? 'ultra' : 'raw';
+                const res = await fetch(`/terminal/tail?target=${encodeURIComponent(targetId)}&mode=${mode}&lines=40`, {
+                    cache: 'no-store',
+                    signal: activityAbortController.signal
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (targetId !== selectedTargetId) return;
+
+                if (data.success && data.content) {
+                    cockpitActivityContent.textContent = data.content;
+                    if (data.is_busy) {
+                        headerAgentDot.classList.add('busy');
+                        cockpitAgentDot.classList.add('busy');
+                        if (headerAgentStatus) headerAgentStatus.textContent = 'Busy ↗';
+                    } else {
+                        headerAgentDot.classList.remove('busy');
+                        cockpitAgentDot.classList.remove('busy');
+                        if (headerAgentStatus) headerAgentStatus.textContent = 'Live Log ↗';
+                    }
+                    if (data.target_name) {
+                        cockpitTargetTitle.textContent = data.target_name;
+                        headerAgentName.textContent = data.target_name;
+                    }
+                    cockpitActivityContent.scrollTop = cockpitActivityContent.scrollHeight;
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') return;
+            }
+        }
 
         // Dynamic Viewport & Purely Height-Driven Grid Collapse
         let baseViewportHeight = window.innerHeight;
@@ -851,12 +1380,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             metricsEl.textContent = `${words} ${words === 1 ? 'word' : 'words'} · ${chars} chars`;
         }
 
-        promptEl.addEventListener('input', updateMetrics);
+        promptEl.addEventListener('input', () => {
+            cockpitPrompt.value = promptEl.value;
+            autoResize(cockpitPrompt);
+            updateMetrics();
+        });
+
+        cockpitPrompt.addEventListener('input', () => {
+            promptEl.value = cockpitPrompt.value;
+            autoResize(cockpitPrompt);
+            updateMetrics();
+        });
 
         clearBtn.addEventListener('click', () => {
             if (!promptEl.value) return;
             lastCleared = promptEl.value;
             promptEl.value = '';
+            cockpitPrompt.value = '';
+            autoResize(cockpitPrompt);
             undoBtn.style.display = 'inline';
             updateMetrics();
             promptEl.focus();
@@ -866,6 +1407,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         undoBtn.addEventListener('click', () => {
             if (!lastCleared) return;
             promptEl.value = lastCleared;
+            cockpitPrompt.value = lastCleared;
+            autoResize(cockpitPrompt);
             lastCleared = '';
             undoBtn.style.display = 'none';
             updateMetrics();
@@ -980,11 +1523,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }
         }
 
+        function updateActivityHeaderOptimistic() {
+            const resolved = getResolvedTarget();
+            if (resolved) {
+                const name = (selectedTargetId === 'auto' ? (resolved.agent_name || resolved.name) : resolved.name) || 'Live Log';
+                if (headerAgentName) headerAgentName.textContent = name;
+                if (cockpitTargetTitle) cockpitTargetTitle.textContent = name;
+                const isBusy = (resolved.status === 'busy' || resolved.is_busy);
+                if (isBusy) {
+                    headerAgentDot.classList.add('busy');
+                    cockpitAgentDot.classList.add('busy');
+                    if (headerAgentStatus) headerAgentStatus.textContent = 'Busy ↗';
+                } else {
+                    headerAgentDot.classList.remove('busy');
+                    cockpitAgentDot.classList.remove('busy');
+                    if (headerAgentStatus) headerAgentStatus.textContent = 'Live Log ↗';
+                }
+            }
+        }
+
         function selectTarget(targetId) {
             selectedTargetId = targetId;
             localStorage.setItem('bridge_target_id', selectedTargetId);
             haptic(15);
             renderBentoGrid();
+            updateActivityHeaderOptimistic();
+            fetchActivityTail();
         }
 
         function openHistorySheet() {
@@ -1035,11 +1599,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
                 if (!force && newSignature === lastSignature) {
                     updateSendButtonLabel();
+                    updateActivityHeaderOptimistic();
                     return;
                 }
 
                 lastSignature = newSignature;
                 renderBentoGrid();
+                updateActivityHeaderOptimistic();
             } catch (e) {
                 // Keep UI stable if offline
             }
@@ -1092,21 +1658,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
                 haptic([30, 40, 30]);
                 sendBtn.classList.add('success');
+                cockpitSendBtn.classList.add('success');
                 sendTitle.textContent = 'Sent ✓';
                 sendSubtitle.textContent = data.message || 'Delivered directly to session';
 
                 if (customText === null) {
                     savePromptToHistory(text);
                     promptEl.value = '';
+                    cockpitPrompt.value = '';
+                    autoResize(cockpitPrompt);
                     undoBtn.style.display = 'none';
                     updateMetrics();
                 }
 
+                setTimeout(fetchActivityTail, 350);
+
                 setTimeout(() => {
                     sendBtn.classList.remove('success');
+                    cockpitSendBtn.classList.remove('success');
                     sendBtn.disabled = false;
                     updateSendButtonLabel();
-                    promptEl.focus();
+                    if (!cockpitModal.classList.contains('open')) {
+                        promptEl.focus();
+                    }
                 }, 600);
 
             } catch (err) {
@@ -1137,6 +1711,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         attachInstantTap(btnYes, () => executePrompt('y', 'execute'));
         attachInstantTap(btnNo, () => executePrompt('n', 'execute'));
         attachInstantTap(btnInterrupt, () => executePrompt('', 'interrupt'));
+
+        // Cockpit Dock actions
+        attachInstantTap(cockpitSendBtn, () => executePrompt(null, null));
+        attachInstantTap(cockpitBtnEnter, () => executePrompt('', 'raw_enter'));
+        attachInstantTap(cockpitBtnContinue, () => executePrompt('continue', 'execute'));
+        attachInstantTap(cockpitBtnYes, () => executePrompt('y', 'execute'));
+        attachInstantTap(cockpitBtnNo, () => executePrompt('n', 'execute'));
+        attachInstantTap(cockpitBtnInterrupt, () => executePrompt('', 'interrupt'));
 
         window.addEventListener('keydown', (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -1185,8 +1767,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         updateViewportHeight();
         ping();
         fetchTargets(true);
+        fetchActivityTail();
         setInterval(ping, 4000);
         setInterval(() => fetchTargets(false), 5000);
+        setInterval(fetchActivityTail, 2500);
         updateMetrics();
     </script>
 </body>
@@ -1272,6 +1856,30 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
         except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
             self.close_connection = True
 
+    def do_HEAD(self):
+        clean_path = self.path.split("?")[0]
+        try:
+            if clean_path in ("/", "/index.html"):
+                data = HTML_TEMPLATE.encode("utf-8")
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+            elif clean_path == "/ping":
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "15")
+                self.end_headers()
+            else:
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
+            self.close_connection = True
+
     def do_GET(self):
         clean_path = self.path.split("?")[0]
 
@@ -1316,6 +1924,59 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 payload = json.dumps({
                     "targets": targets_dict,
                     "default_target": default_t
+                }).encode("utf-8")
+
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            elif clean_path == "/terminal/tail":
+                if not self._is_authenticated():
+                    self.send_response(401)
+                    self._send_cors_headers()
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"Unauthorized"}')
+                    return
+
+                parsed_url = urllib.parse.urlparse(self.path)
+                params = urllib.parse.parse_qs(parsed_url.query)
+                target_id = params.get("target", ["auto"])[0]
+                mode = params.get("mode", ["ultra"])[0].lower()
+                try:
+                    lines_count = int(params.get("lines", ["40"])[0])
+                except ValueError:
+                    lines_count = 40
+
+                target = self.target_manager.resolve(target_id) if self.target_manager else None
+                if not target:
+                    err_payload = json.dumps({"success": False, "error": f"Target '{target_id}' not found."}).encode("utf-8")
+                    self.send_response(404)
+                    self._send_cors_headers()
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(err_payload)))
+                    self.end_headers()
+                    self.wfile.write(err_payload)
+                    return
+
+                adapter = get_adapter(target)
+                raw_history = adapter.get_history(target, lines=max(lines_count, 50))
+                
+                if mode == "ultra":
+                    content = compress_caveman_ultra(raw_history)
+                else:
+                    content = format_raw_tail(raw_history, lines=lines_count)
+
+                payload = json.dumps({
+                    "success": True,
+                    "target_id": target.id,
+                    "target_name": target.name,
+                    "mode": mode,
+                    "content": content,
+                    "is_busy": target.is_busy
                 }).encode("utf-8")
 
                 self.send_response(200)

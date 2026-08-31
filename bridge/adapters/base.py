@@ -34,3 +34,8 @@ class TerminalAdapter(ABC):
             DeliveryResult indicating success or failure.
         """
         pass
+
+    def get_history(self, target: Target, lines: int = 50) -> str:
+        """Retrieves recent terminal output history for the target."""
+        return ""
+

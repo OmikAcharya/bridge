@@ -109,3 +109,38 @@ class ITermAdapter(TerminalAdapter):
                 adapter_used=self.name,
                 error=f"ITermAdapter exception: {str(e)}"
             )
+
+    def get_history(self, target: Target, lines: int = 50) -> str:
+        """Retrieves recent terminal output history from the iTerm2 session."""
+        tty = target.tty
+        script = f'''
+        tell application "iTerm"
+            set foundSession to missing value
+            repeat with w in windows
+                repeat with t in tabs of w
+                    repeat with s in sessions of t
+                        if tty of s is "{tty}" then
+                            set foundSession to s
+                            exit repeat
+                        end if
+                    end repeat
+                    if foundSession is not missing value then exit repeat
+                end repeat
+                if foundSession is not missing value then exit repeat
+            end repeat
+            if foundSession is not missing value then
+                return text of foundSession
+            else
+                return ""
+            end if
+        end tell
+        '''
+        try:
+            res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=3.0)
+            if res.returncode == 0 and res.stdout:
+                raw_lines = res.stdout.splitlines()
+                return "\n".join(raw_lines[-lines:])
+        except Exception:
+            pass
+        return ""
+
