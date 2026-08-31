@@ -340,14 +340,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             font-size: 14px;
         }
 
-        /* Editor Area */
+        /* Editor Area with Integrated Activity Header */
         .editor-container {
             flex: 1;
             display: flex;
             flex-direction: column;
             background: var(--surface);
             border: 1px solid var(--surface-border);
-            border-radius: 14px;
+            border-radius: 12px;
             overflow: hidden;
             transition: border-color 0.15s ease;
             min-height: 80px;
@@ -355,6 +355,55 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         .editor-container:focus-within {
             border-color: var(--surface-border-focus);
+        }
+
+        .editor-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 7px 10px 6px 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            flex-shrink: 0;
+        }
+
+        .keyboard-active .editor-header {
+            display: none;
+        }
+
+        .editor-activity-btn {
+            background: transparent;
+            border: none;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 6px;
+            transition: opacity 0.15s ease;
+        }
+
+        .editor-activity-btn:active {
+            opacity: 0.7;
+        }
+
+        .editor-agent-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 170px;
+        }
+
+        .editor-status-tag {
+            font-size: 10px;
+            font-family: var(--font-mono);
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1px 5px;
+            border-radius: 4px;
+            white-space: nowrap;
         }
 
         textarea {
@@ -564,81 +613,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             opacity: 0.5;
             cursor: not-allowed;
             transform: none;
-        }
-
-        /* Live Agent Activity Banner - Seamlessly matched with Bento/Editor design */
-        .activity-banner-btn {
-            width: 100%;
-            background: var(--surface);
-            border: 1px solid var(--surface-border);
-            border-radius: 12px;
-            padding: 8px 12px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: pointer;
-            margin-bottom: 8px;
-            flex-shrink: 0;
-            transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
-        }
-
-        .activity-banner-btn:active {
-            background: var(--surface-hover);
-            border-color: var(--surface-border-focus);
-            transform: scale(0.985);
-        }
-
-        .keyboard-active .activity-banner-btn {
-            display: none;
-        }
-
-        .banner-left {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            min-width: 0;
-        }
-
-        .banner-text-group {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            min-width: 0;
-        }
-
-        .banner-agent-name {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-main);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 160px;
-        }
-
-        .banner-status-tag {
-            font-size: 10px;
-            font-family: var(--font-mono);
-            color: var(--text-muted);
-            background: rgba(255, 255, 255, 0.05);
-            padding: 2px 6px;
-            border-radius: 4px;
-            white-space: nowrap;
-        }
-
-        .banner-right {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            color: var(--text-muted);
-            font-size: 11px;
-            font-family: var(--font-mono);
-            flex-shrink: 0;
-        }
-
-        .banner-arrow {
-            font-size: 11px;
-            color: var(--text-main);
         }
 
         .activity-dot {
@@ -1021,21 +995,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <span id="miniTargetPath">~/Developer/bridge</span>
     </div>
 
-    <!-- Live Agent Activity Banner (Ergonomically placed right above Prompt Editor) -->
-    <button id="openCockpitBtn" class="activity-banner-btn" title="Open Full Live Terminal Cockpit">
-        <div class="banner-left">
-            <div id="headerAgentDot" class="activity-dot"></div>
-            <div class="banner-text-group">
-                <span id="headerAgentName" class="banner-agent-name">Antigravity — bridge</span>
-                <span id="headerAgentStatus" class="banner-status-tag">Live Activity Feed</span>
-            </div>
-        </div>
-        <div class="banner-right">
-            <span class="banner-hint">View Log</span>
-            <span class="banner-arrow">↗</span>
-        </div>
-    </button>
-
     <!-- Full-Screen Activity & Dictation Cockpit Modal -->
     <div id="cockpitModal" class="cockpit-modal">
         <!-- Cockpit Header -->
@@ -1096,8 +1055,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- Editor -->
+    <!-- Unified Editor Container with Integrated Terminal Activity Header -->
     <div class="editor-container">
+        <div class="editor-header">
+            <button id="openCockpitBtn" class="editor-activity-btn" title="Open Terminal Activity Log">
+                <div id="headerAgentDot" class="activity-dot"></div>
+                <span id="headerAgentName" class="editor-agent-name">Antigravity — bridge</span>
+                <span id="headerAgentStatus" class="editor-status-tag">Live Log ↗</span>
+            </button>
+        </div>
         <textarea 
             id="prompt" 
             placeholder="Dictate with Wispr Flow or type..." 
@@ -1288,15 +1254,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     if (data.is_busy) {
                         headerAgentDot.classList.add('busy');
                         cockpitAgentDot.classList.add('busy');
-                        if (headerAgentStatus) headerAgentStatus.textContent = 'Agent Busy · Tap to inspect';
+                        if (headerAgentStatus) headerAgentStatus.textContent = 'Busy ↗';
                     } else {
                         headerAgentDot.classList.remove('busy');
                         cockpitAgentDot.classList.remove('busy');
-                        if (headerAgentStatus) headerAgentStatus.textContent = 'Agent Ready · Tap to view log';
+                        if (headerAgentStatus) headerAgentStatus.textContent = 'Live Log ↗';
                     }
                     if (data.target_name) {
                         cockpitTargetTitle.textContent = data.target_name;
-                        headerAgentName.textContent = data.target_name.split('—')[0].trim();
+                        headerAgentName.textContent = data.target_name;
                     }
                     cockpitActivityContent.scrollTop = cockpitActivityContent.scrollHeight;
                 }
