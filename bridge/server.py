@@ -1279,12 +1279,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             haptic(10);
         });
 
+        let activityAbortController = null;
+
         async function fetchActivityTail() {
+            if (activityAbortController) {
+                activityAbortController.abort();
+            }
+            activityAbortController = new AbortController();
+
             try {
+                const targetId = selectedTargetId;
                 const mode = isCavemanUltra ? 'ultra' : 'raw';
-                const res = await fetch(`/terminal/tail?target=${encodeURIComponent(selectedTargetId)}&mode=${mode}&lines=40`);
+                const res = await fetch(`/terminal/tail?target=${encodeURIComponent(targetId)}&mode=${mode}&lines=40`, {
+                    cache: 'no-store',
+                    signal: activityAbortController.signal
+                });
                 if (!res.ok) return;
                 const data = await res.json();
+                if (targetId !== selectedTargetId) return;
+
                 if (data.success && data.content) {
                     cockpitActivityContent.textContent = data.content;
                     if (data.is_busy) {
@@ -1302,7 +1315,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     }
                     cockpitActivityContent.scrollTop = cockpitActivityContent.scrollHeight;
                 }
-            } catch (e) {}
+            } catch (e) {
+                if (e.name === 'AbortError') return;
+            }
         }
 
         // Dynamic Viewport & Purely Height-Driven Grid Collapse
@@ -1508,11 +1523,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }
         }
 
+        function updateActivityHeaderOptimistic() {
+            const resolved = getResolvedTarget();
+            if (resolved) {
+                const name = (selectedTargetId === 'auto' ? (resolved.agent_name || resolved.name) : resolved.name) || 'Live Log';
+                if (headerAgentName) headerAgentName.textContent = name;
+                if (cockpitTargetTitle) cockpitTargetTitle.textContent = name;
+                const isBusy = (resolved.status === 'busy' || resolved.is_busy);
+                if (isBusy) {
+                    headerAgentDot.classList.add('busy');
+                    cockpitAgentDot.classList.add('busy');
+                    if (headerAgentStatus) headerAgentStatus.textContent = 'Busy ↗';
+                } else {
+                    headerAgentDot.classList.remove('busy');
+                    cockpitAgentDot.classList.remove('busy');
+                    if (headerAgentStatus) headerAgentStatus.textContent = 'Live Log ↗';
+                }
+            }
+        }
+
         function selectTarget(targetId) {
             selectedTargetId = targetId;
             localStorage.setItem('bridge_target_id', selectedTargetId);
             haptic(15);
             renderBentoGrid();
+            updateActivityHeaderOptimistic();
+            fetchActivityTail();
         }
 
         function openHistorySheet() {
@@ -1563,11 +1599,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
                 if (!force && newSignature === lastSignature) {
                     updateSendButtonLabel();
+                    updateActivityHeaderOptimistic();
                     return;
                 }
 
                 lastSignature = newSignature;
                 renderBentoGrid();
+                updateActivityHeaderOptimistic();
             } catch (e) {
                 // Keep UI stable if offline
             }
