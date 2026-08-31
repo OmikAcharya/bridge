@@ -107,7 +107,7 @@ class SessionDiscovery:
             # Check processes from child to parent (deepest first)
             for p in reversed(procs):
                 cmd = p["cmd"]
-                if "hi.py" in cmd or "test_discovery" in cmd or "test_classifier" in cmd:
+                if "main.py" in cmd or "hi.py" in cmd or "test_discovery" in cmd or "test_classifier" in cmd:
                     continue
                 name, atype = classify_command(cmd)
                 if atype not in ("shell", "terminal"):
@@ -125,7 +125,7 @@ class SessionDiscovery:
                         break
                 # Fall back to top non-bridge process
                 for p in reversed(procs):
-                    if "hi.py" not in p["cmd"] and "test_" not in p["cmd"]:
+                    if "main.py" not in p["cmd"] and "hi.py" not in p["cmd"] and "test_" not in p["cmd"]:
                         best_proc = p
                         name, atype = classify_command(p["cmd"])
                         agent_name = name
