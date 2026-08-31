@@ -35,11 +35,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
     <meta name="theme-color" content="#09090b">
     <title>Prompt Bridge</title>
     <style>
         :root {
+            --app-height: 100dvh;
             --bg: #09090b;
             --surface: #141417;
             --surface-hover: #1c1c20;
@@ -68,15 +69,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             -webkit-tap-highlight-color: transparent;
         }
 
+        html, body {
+            height: 100%;
+            height: var(--app-height, 100dvh);
+            max-height: var(--app-height, 100dvh);
+            overflow: hidden;
+        }
+
         body {
             font-family: var(--font-sans);
             background-color: var(--bg);
             color: var(--text-main);
-            height: 100dvh;
             display: flex;
             flex-direction: column;
-            padding: calc(10px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom)) 14px;
-            overflow: hidden;
+            padding: calc(8px + env(safe-area-inset-top)) 14px calc(10px + env(safe-area-inset-bottom)) 14px;
+            transition: padding 0.15s ease;
         }
 
         /* Header */
@@ -86,6 +93,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             justify-content: space-between;
             padding: 2px 2px 8px 2px;
             flex-shrink: 0;
+            transition: padding 0.15s ease;
         }
 
         .title-group {
@@ -148,6 +156,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             gap: 8px;
             margin-bottom: 10px;
             flex-shrink: 0;
+            transition: opacity 0.15s ease, max-height 0.2s ease, margin 0.15s ease;
         }
 
         .bento-tile {
@@ -248,6 +257,63 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             text-overflow: ellipsis;
         }
 
+        /* Keyboard Active Mini Session Bar */
+        .keyboard-mini-bar {
+            display: none;
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 8px;
+            padding: 4px 10px;
+            margin-bottom: 6px;
+            font-size: 11px;
+            font-family: var(--font-mono);
+            color: var(--text-muted);
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .keyboard-mini-bar .mini-target-name {
+            color: var(--text-main);
+            font-weight: 600;
+        }
+
+        /* Keyboard Open Layout Mode */
+        body.keyboard-active {
+            padding-top: calc(4px + env(safe-area-inset-top));
+            padding-bottom: 6px;
+        }
+
+        body.keyboard-active header {
+            padding-bottom: 4px;
+        }
+
+        body.keyboard-active .bento-grid {
+            display: none;
+        }
+
+        body.keyboard-active .keyboard-mini-bar {
+            display: flex;
+        }
+
+        body.keyboard-active .quick-actions-bar {
+            padding-top: 4px;
+            padding-bottom: 2px;
+        }
+
+        body.keyboard-active .controls {
+            margin-top: 4px;
+            gap: 4px;
+        }
+
+        body.keyboard-active .send-btn {
+            height: 48px;
+        }
+
+        body.keyboard-active .send-btn-title {
+            font-size: 14px;
+        }
+
         /* Editor Area */
         .editor-container {
             flex: 1;
@@ -258,6 +324,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             border-radius: 14px;
             overflow: hidden;
             transition: border-color 0.15s ease;
+            min-height: 80px;
         }
 
         .editor-container:focus-within {
@@ -272,9 +339,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             outline: none;
             color: var(--text-main);
             font-family: var(--font-sans);
-            font-size: 18px;
-            line-height: 1.45;
-            padding: 14px;
+            font-size: 17px;
+            line-height: 1.4;
+            padding: 12px 14px;
             resize: none;
             -webkit-appearance: none;
         }
@@ -288,7 +355,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 6px 12px 8px 12px;
+            padding: 5px 12px 6px 12px;
             border-top: 1px solid rgba(255, 255, 255, 0.04);
             font-size: 11px;
             color: var(--text-muted);
@@ -323,7 +390,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             gap: 6px;
             overflow-x: auto;
             scrollbar-width: none;
-            padding: 8px 0 4px 0;
+            padding: 6px 0 4px 0;
             flex-shrink: 0;
         }
 
@@ -365,7 +432,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             margin-top: 6px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
             flex-shrink: 0;
         }
 
@@ -380,7 +447,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 13px;
+            font-size: 12px;
             color: var(--text-muted);
             cursor: pointer;
             user-select: none;
@@ -388,8 +455,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         .toggle-switch {
             position: relative;
-            width: 36px;
-            height: 20px;
+            width: 32px;
+            height: 18px;
             background: #27272a;
             border-radius: 10px;
             transition: background 0.2s;
@@ -399,8 +466,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .toggle-switch::after {
             content: '';
             position: absolute;
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             border-radius: 50%;
             background: white;
             top: 2px;
@@ -417,17 +484,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         input[type="checkbox"]:checked + .toggle-switch::after {
-            transform: translateX(16px);
+            transform: translateX(14px);
         }
 
         .send-btn {
             width: 100%;
-            height: 54px;
+            height: 52px;
             border-radius: 12px;
             border: none;
             background: var(--accent);
             color: var(--accent-text);
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 600;
             letter-spacing: -0.01em;
             cursor: pointer;
@@ -596,6 +663,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <!-- Injected dynamically via JS -->
     </div>
 
+    <!-- Keyboard Open Mini Bar -->
+    <div id="keyboardMiniBar" class="keyboard-mini-bar">
+        <span>Target: <span id="miniTargetName" class="mini-target-name">Auto</span></span>
+        <span id="miniTargetPath">~/Developer/bridge</span>
+    </div>
+
     <!-- Editor -->
     <div class="editor-container">
         <textarea 
@@ -676,6 +749,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const refreshBtn = document.getElementById('refreshBtn');
 
         const bentoGrid = document.getElementById('bentoGrid');
+        const miniTargetName = document.getElementById('miniTargetName');
+        const miniTargetPath = document.getElementById('miniTargetPath');
 
         const historyModal = document.getElementById('historyModal');
         const historyList = document.getElementById('historyList');
@@ -694,10 +769,43 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let promptHistory = JSON.parse(localStorage.getItem('bridge_prompt_history') || '[]');
         let lastSignature = '';
 
+        // Dynamic Viewport & Keyboard Resizing
+        function updateViewportHeight() {
+            const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            document.documentElement.style.setProperty('--app-height', `${h}px`);
+            
+            const isKeyboard = (window.innerHeight - h > 120) || (window.screen && window.screen.height - h > 200);
+            if (isKeyboard || document.activeElement === promptEl) {
+                document.body.classList.add('keyboard-active');
+            } else {
+                document.body.classList.remove('keyboard-active');
+            }
+        }
+
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', updateViewportHeight);
+            window.visualViewport.addEventListener('scroll', updateViewportHeight);
+        }
+        window.addEventListener('resize', updateViewportHeight);
+
+        promptEl.addEventListener('focus', () => {
+            document.body.classList.add('keyboard-active');
+            setTimeout(updateViewportHeight, 60);
+        });
+
+        promptEl.addEventListener('blur', () => {
+            setTimeout(() => {
+                if (document.activeElement !== promptEl) {
+                    document.body.classList.remove('keyboard-active');
+                    updateViewportHeight();
+                }
+            }, 180);
+        });
+
         if (localStorage.getItem('bridge_enter') === 'false') {
             enterToggle.checked = false;
         } else {
-            enterToggle.checked = true; // default true for terminal agents
+            enterToggle.checked = true;
         }
 
         enterToggle.addEventListener('change', () => {
@@ -831,20 +939,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             if (selectedTargetId === 'focused') {
                 sendTitle.textContent = willEnter ? 'Paste & Enter on Mac' : 'Paste to Focused Window';
                 sendSubtitle.textContent = 'Active application on Mac';
+                miniTargetName.textContent = 'Focused App';
+                miniTargetPath.textContent = 'Active Window';
                 return;
             }
 
             if (resolved) {
                 const ttyStr = resolved.tty ? resolved.tty.replace('/dev/', '') : '';
+                const compactPath = (resolved.metadata && resolved.metadata.compact_cwd) || resolved.folder || '~';
                 sendTitle.textContent = willEnter ? 'Send & Execute' : 'Paste Prompt';
                 if (selectedTargetId === 'auto') {
                     sendSubtitle.textContent = `to ${resolved.agent_name || resolved.name} [${ttyStr}]`;
+                    miniTargetName.textContent = `Auto: ${resolved.agent_name || resolved.name}`;
                 } else {
                     sendSubtitle.textContent = `to ${resolved.name} [${ttyStr}]`;
+                    miniTargetName.textContent = resolved.name;
                 }
+                miniTargetPath.textContent = compactPath;
             } else {
                 sendTitle.textContent = 'Send to Mac';
                 sendSubtitle.textContent = 'No terminal target';
+                miniTargetName.textContent = 'Offline';
+                miniTargetPath.textContent = '--';
             }
         }
 
@@ -932,9 +1048,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 return;
             }
 
-            const sendEnter = enterToggle.checked;
-            const resolvedAction = action || (sendEnter ? 'execute' : 'paste');
-
             haptic(20);
             const initialTitle = sendTitle.textContent;
             const initialSubtitle = sendSubtitle.textContent;
@@ -943,6 +1056,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             sendTitle.textContent = 'Sending...';
 
             try {
+                const sendEnter = enterToggle.checked;
+                const resolvedAction = action || (sendEnter ? 'execute' : 'paste');
+
                 const res = await fetch('/prompt', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -991,14 +1107,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }
         }
 
-        sendBtn.addEventListener('click', () => executePrompt(null, null));
+        // Instant Touch execution on mobile (prevents losing focus/keyboard lag)
+        function attachInstantTap(btn, callback) {
+            btn.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                callback();
+            });
+        }
 
-        // Quick action chips
-        btnEnterOnly.addEventListener('click', () => executePrompt('', 'raw_enter'));
-        btnContinue.addEventListener('click', () => executePrompt('continue', 'execute'));
-        btnYes.addEventListener('click', () => executePrompt('y', 'execute'));
-        btnNo.addEventListener('click', () => executePrompt('n', 'execute'));
-        btnInterrupt.addEventListener('click', () => executePrompt('', 'interrupt'));
+        attachInstantTap(sendBtn, () => executePrompt(null, null));
+        attachInstantTap(btnEnterOnly, () => executePrompt('', 'raw_enter'));
+        attachInstantTap(btnContinue, () => executePrompt('continue', 'execute'));
+        attachInstantTap(btnYes, () => executePrompt('y', 'execute'));
+        attachInstantTap(btnNo, () => executePrompt('n', 'execute'));
+        attachInstantTap(btnInterrupt, () => executePrompt('', 'interrupt'));
 
         window.addEventListener('keydown', (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -1021,6 +1143,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         // Initialize
+        updateViewportHeight();
         ping();
         fetchTargets(true);
         setInterval(ping, 5000);
