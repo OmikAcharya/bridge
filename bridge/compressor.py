@@ -12,7 +12,7 @@ from typing import List, Dict, Any
 ANSI_REGEX = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\([A-Za-z0-9]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)')
 CONTROL_CHARS_REGEX = re.compile(r'[\r\x00-\x08\x0b\x0c\x0e-\x1f]')
 BORDER_REGEX = re.compile(r'^[─━═\-_=~]{3,}$')
-SPINNER_CHARS = set("⣟⣯⣷⣾⣽⣻⢿⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏◴◵◶◷")
+SPINNERS = set("⣟⣯⣷⣾⣽⣻⢿⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⡿◴◵◶◷")
 
 
 def clean_ansi(text: str) -> str:
@@ -28,41 +28,65 @@ def compress_caveman_ultra(raw_text: str, max_items: int = 4) -> str:
     """
     Synthesizes raw agent terminal output into high-density Caveman Ultra format.
     Extracts:
-    - Current State & Active Step
+    - Current State & Active In-Flight Step
     - Compact summary of recent tool actions (deduplicated)
     - Shortest decisive response sentence
     """
     cleaned = clean_ansi(raw_text)
-    lines = [l.strip() for l in cleaned.splitlines() if l.strip()]
+    raw_lines = [l.strip() for l in cleaned.splitlines() if l.strip()]
 
-    # Filter out noisy borders, prompts, and CLI footers
+    # Filter out noisy terminal chrome, status bars, background logs, and borders
     filtered = []
-    for l in lines:
+    for l in raw_lines:
         if BORDER_REGEX.match(l):
             continue
-        if "esc to cancel" in l or "ctrl+o to expand" in l or "running command..." in l.lower():
+        if re.search(r'esc to (cancel|interrupt)', l, re.IGNORECASE):
             continue
-        if l.startswith("Tip: Use /help") or l == ">":
+        if re.search(r'● \[\d\d:\d\d:\d\d\] .* running', l):
             continue
+        if re.search(r'\b(Gemini|Claude)\b.*(/tasks|task\(s\))', l):
+            continue
+        if l.startswith("└ Tip:") or l.startswith("Tip: Use /"):
+            continue
+        if l == ">":
+            continue
+        # Strip expansion hints
+        l = l.replace("(ctrl+o to expand)", "").strip()
         filtered.append(l)
 
     if not filtered:
-        return "Terminal idle. Ready for prompt."
+        return "● READY\nSession idle."
 
-    # Identify state
+    # 1. Determine active busy state from the tail
     is_busy = False
-    if any("running" in l.lower() or "thought for" in l.lower() or "⣻" in l or "⣟" in l for l in filtered[-5:]):
-        is_busy = True
+    active_step = ""
 
+    tail_scan = filtered[-4:] if len(filtered) >= 4 else filtered
+    for l in reversed(tail_scan):
+        if any(c in l for c in SPINNERS) or "running command" in l.lower() or "thinking..." in l.lower():
+            is_busy = True
+            break
+        if l.startswith("○ Bash("):
+            is_busy = True
+            cmd = l[l.find("(") + 1 : l.rfind(")")].strip()
+            active_step = f"Executing `{cmd.split()[0]}`" if cmd else "Executing command"
+            break
+        if l.startswith("○ Edit("):
+            is_busy = True
+            f = l[l.find("(") + 1 : l.rfind(")")].split("/")[-1].strip()
+            active_step = f"Editing `{f}`" if f else "Editing file"
+            break
+
+    # 2. Extract recent tools & thoughts
     edits = []
     bash_cmds = []
     last_thought = ""
     response_lines = []
-    in_response = False
+    in_user_prompt = False
 
     for l in filtered:
         if l.startswith("> "):
-            in_response = True
+            in_user_prompt = True
             response_lines = []
             continue
 
@@ -71,14 +95,20 @@ def compress_caveman_ultra(raw_text: str, max_items: int = 4) -> str:
             last_thought = f"Thought {m.group(1)}" if m else "Thinking"
             continue
 
+        # Skip thought paragraphs indented under thinking markers
+        if l.startswith("Thinking about") or l.startswith("Checking recent"):
+            continue
+
         if l.startswith("● Bash(") or l.startswith("○ Bash("):
-            cmd = l[l.find("(")+1 : l.rfind(")")]
-            if cmd and cmd not in bash_cmds:
-                bash_cmds.append(cmd)
+            cmd = l[l.find("(") + 1 : l.rfind(")")].strip()
+            if cmd:
+                base_cmd = cmd.split()[0]
+                if base_cmd not in bash_cmds:
+                    bash_cmds.append(base_cmd)
             continue
 
         if l.startswith("● Edit(") or l.startswith("○ Edit("):
-            f = l[l.find("(")+1 : l.rfind(")")].split("/")[-1]
+            f = l[l.find("(") + 1 : l.rfind(")")].split("/")[-1].strip()
             if f and f not in edits:
                 edits.append(f)
             continue
@@ -86,45 +116,38 @@ def compress_caveman_ultra(raw_text: str, max_items: int = 4) -> str:
         if l.startswith("● Read(") or l.startswith("○ Read(") or l.startswith("● View("):
             continue
 
-        if in_response:
-            if not l.startswith("●") and not l.startswith("○") and not l.startswith("▸"):
-                cl = _caveman_compress_line(l)
-                if cl and len(cl) > 2:
-                    response_lines.append(cl)
+        # Potential response lines
+        if not l.startswith("●") and not l.startswith("○") and not l.startswith("▸") and not l.startswith("└") and not any(c in l for c in SPINNERS):
+            cl = _caveman_compress_line(l)
+            if cl and len(cl) > 3:
+                response_lines.append(cl)
 
     output_lines = []
 
-    # 1. State / Current Action
+    # 1. State Line
     if is_busy:
-        step = ""
-        if bash_cmds:
-            step = f" · Executing `{bash_cmds[-1][:32]}`"
-        elif edits:
-            step = f" · Editing `{edits[-1]}`"
-        elif last_thought:
-            step = f" · {last_thought}"
-        output_lines.append(f"● BUSY{step}")
+        step_str = f" · {active_step}" if active_step else (f" · {last_thought}" if last_thought else " · Processing")
+        output_lines.append(f"● BUSY{step_str}")
     else:
         output_lines.append("● READY")
 
-    # 2. Key Actions (Combined into one concise line)
+    # 2. Key Actions (Only if non-empty)
     action_parts = []
     if edits:
         action_parts.append(f"Edits: {', '.join(edits[-3:])}")
     if bash_cmds:
-        short_cmds = [c.split()[0] for c in bash_cmds[-2:]]
-        action_parts.append(f"Ran: {', '.join(short_cmds)}")
+        action_parts.append(f"Ran: {', '.join(bash_cmds[-3:])}")
     if action_parts:
         output_lines.append(" · ".join(action_parts))
 
-    # 3. Last Response snippet (1-2 lines max)
+    # 3. Decisive Response Line (Concise and clean)
     if response_lines:
         clean_resp = " ".join(response_lines[-2:])
-        if len(clean_resp) > 130:
-            clean_resp = clean_resp[:127] + "..."
+        if len(clean_resp) > 140:
+            clean_resp = clean_resp[:137] + "..."
         output_lines.append(f"“{clean_resp}”")
 
-    return "\n".join(output_lines) if output_lines else "Session ready."
+    return "\n".join(output_lines) if output_lines else "● READY\nSession idle."
 
 
 def _caveman_compress_line(line: str) -> str:

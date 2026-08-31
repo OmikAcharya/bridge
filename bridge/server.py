@@ -566,31 +566,80 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             transform: none;
         }
 
-        /* Header Activity Pill */
-        .btn-activity-pill {
-            background: rgba(255, 255, 255, 0.05);
+        /* Live Agent Activity Banner - Ergonomically positioned above prompt editor */
+        .activity-banner-btn {
+            width: 100%;
+            background: rgba(22, 22, 26, 0.85);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 20px;
-            height: 28px;
-            padding: 0 10px;
+            border-radius: var(--radius-sm);
+            padding: 8px 12px;
             display: flex;
             align-items: center;
-            gap: 6px;
+            justify-content: space-between;
+            cursor: pointer;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+            transition: all 0.15s ease;
+            margin-bottom: 2px;
+            flex-shrink: 0;
+        }
+
+        .activity-banner-btn:active {
+            background: var(--surface-hover);
+            border-color: var(--surface-border-focus);
+            transform: scale(0.985);
+        }
+
+        .keyboard-active .activity-banner-btn {
+            display: none;
+        }
+
+        .banner-left {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            min-width: 0;
+        }
+
+        .banner-text-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            min-width: 0;
+            line-height: 1.25;
+        }
+
+        .banner-agent-name {
+            font-size: 12px;
+            font-weight: 600;
             color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 180px;
+        }
+
+        .banner-status-tag {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+        }
+
+        .banner-right {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--text-muted);
             font-size: 11px;
             font-weight: 500;
-            cursor: pointer;
-            transition: all 0.15s ease;
+            flex-shrink: 0;
         }
 
-        .btn-activity-pill:active {
-            background: var(--surface-hover);
-            transform: scale(0.97);
-        }
-
-        .pill-arrow {
-            font-size: 10px;
-            opacity: 0.6;
+        .banner-arrow {
+            font-size: 12px;
+            color: var(--accent);
+            opacity: 0.85;
         }
 
         .activity-dot {
@@ -945,11 +994,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <span class="title">Prompt Bridge</span>
         </div>
         <div class="header-actions">
-            <button id="openCockpitBtn" class="btn-activity-pill" title="Open Full Activity & Dictation Cockpit">
-                <div id="headerAgentDot" class="activity-dot"></div>
-                <span id="headerAgentName">Live Log</span>
-                <span class="pill-arrow">↗</span>
-            </button>
             <button id="historyBtn" class="btn-icon-subtle" title="Prompt History">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -977,6 +1021,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <span>Target: <span id="miniTargetName" class="mini-target-name">Auto</span></span>
         <span id="miniTargetPath">~/Developer/bridge</span>
     </div>
+
+    <!-- Live Agent Activity Banner (Ergonomically placed right above Prompt Editor) -->
+    <button id="openCockpitBtn" class="activity-banner-btn" title="Open Full Live Terminal Cockpit">
+        <div class="banner-left">
+            <div id="headerAgentDot" class="activity-dot"></div>
+            <div class="banner-text-group">
+                <span id="headerAgentName" class="banner-agent-name">Antigravity — bridge</span>
+                <span id="headerAgentStatus" class="banner-status-tag">Live Activity Feed</span>
+            </div>
+        </div>
+        <div class="banner-right">
+            <span class="banner-hint">View Log</span>
+            <span class="banner-arrow">↗</span>
+        </div>
+    </button>
 
     <!-- Full-Screen Activity & Dictation Cockpit Modal -->
     <div id="cockpitModal" class="cockpit-modal">
@@ -1133,6 +1192,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const openCockpitBtn = document.getElementById('openCockpitBtn');
         const headerAgentDot = document.getElementById('headerAgentDot');
         const headerAgentName = document.getElementById('headerAgentName');
+        const headerAgentStatus = document.getElementById('headerAgentStatus');
 
         const cockpitModal = document.getElementById('cockpitModal');
         const cockpitAgentDot = document.getElementById('cockpitAgentDot');
@@ -1229,9 +1289,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     if (data.is_busy) {
                         headerAgentDot.classList.add('busy');
                         cockpitAgentDot.classList.add('busy');
+                        if (headerAgentStatus) headerAgentStatus.textContent = 'Agent Busy · Tap to inspect';
                     } else {
                         headerAgentDot.classList.remove('busy');
                         cockpitAgentDot.classList.remove('busy');
+                        if (headerAgentStatus) headerAgentStatus.textContent = 'Agent Ready · Tap to view log';
                     }
                     if (data.target_name) {
                         cockpitTargetTitle.textContent = data.target_name;
