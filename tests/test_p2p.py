@@ -22,8 +22,19 @@ class TestP2PAndQR(unittest.TestCase):
 
     def test_p2p_manager_pairing_url_and_auth(self):
         p2p = P2PManager(room_id="room123", auth_key="secretkey_xyz")
-        url = p2p.generate_pairing_url("http://192.168.1.5:8765")
-        self.assertIn("#p2p=1&room=room123&key=secretkey_xyz", url)
+        p2p_url = p2p.generate_p2p_url()
+        self.assertIn("https://omikacharya.github.io/bridge/#p2p=1&room=room123&key=secretkey_xyz", p2p_url)
+
+        lan_url = p2p.generate_lan_url("192.168.1.5", 8765)
+        self.assertEqual(lan_url, "http://192.168.1.5:8765")
+
+        p2p_banner = p2p.get_pairing_banner(is_lan_exposed=False)
+        self.assertIn("P2P ZERO-EXPOSURE", p2p_banner)
+        self.assertIn("https://omikacharya.github.io/bridge", p2p_banner)
+
+        lan_banner = p2p.get_pairing_banner(lan_ip="192.168.1.5", port=8765, is_lan_exposed=True)
+        self.assertIn("DIRECT LAN IP EXPOSURE", lan_banner)
+        self.assertIn("http://192.168.1.5:8765", lan_banner)
 
         self.assertTrue(p2p.verify_auth_token("secretkey_xyz"))
         self.assertFalse(p2p.verify_auth_token("wrong_key"))
