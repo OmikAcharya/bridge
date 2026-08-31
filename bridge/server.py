@@ -566,23 +566,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             transform: none;
         }
 
-        /* Live Agent Activity Banner - Ergonomically positioned above prompt editor */
+        /* Live Agent Activity Banner - Seamlessly matched with Bento/Editor design */
         .activity-banner-btn {
             width: 100%;
-            background: rgba(22, 22, 26, 0.85);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: var(--radius-sm);
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 12px;
             padding: 8px 12px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             cursor: pointer;
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
-            transition: all 0.15s ease;
-            margin-bottom: 2px;
+            margin-bottom: 8px;
             flex-shrink: 0;
+            transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
         }
 
         .activity-banner-btn:active {
@@ -598,48 +595,50 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .banner-left {
             display: flex;
             align-items: center;
-            gap: 9px;
+            gap: 8px;
             min-width: 0;
         }
 
         .banner-text-group {
             display: flex;
-            flex-direction: column;
-            align-items: flex-start;
+            align-items: center;
+            gap: 7px;
             min-width: 0;
-            line-height: 1.25;
         }
 
         .banner-agent-name {
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--text-main);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 180px;
+            max-width: 160px;
         }
 
         .banner-status-tag {
             font-size: 10px;
-            color: var(--text-muted);
             font-family: var(--font-mono);
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+            white-space: nowrap;
         }
 
         .banner-right {
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 4px;
             color: var(--text-muted);
             font-size: 11px;
-            font-weight: 500;
+            font-family: var(--font-mono);
             flex-shrink: 0;
         }
 
         .banner-arrow {
-            font-size: 12px;
-            color: var(--accent);
-            opacity: 0.85;
+            font-size: 11px;
+            color: var(--text-main);
         }
 
         .activity-dot {
@@ -647,12 +646,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             height: 6px;
             border-radius: 50%;
             background: var(--green);
-            box-shadow: 0 0 6px var(--green-glow);
+            flex-shrink: 0;
         }
 
         .activity-dot.busy {
             background: var(--blue);
-            box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
             animation: pulse 1.5s infinite;
         }
 
@@ -664,14 +662,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             right: 0;
             bottom: 0;
             height: 100dvh;
-            background: #09090b;
+            background: var(--bg);
             z-index: 95;
             display: flex;
             flex-direction: column;
             opacity: 0;
             pointer-events: none;
-            transform: scale(0.98);
-            transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            transform: scale(0.99);
+            transition: opacity 0.15s ease, transform 0.15s ease;
         }
 
         .cockpit-modal.open {
@@ -682,14 +680,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         .cockpit-header {
             height: 48px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 1px solid var(--surface-border);
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 0 12px;
-            background: rgba(18, 18, 22, 0.85);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            background: var(--surface);
             flex-shrink: 0;
         }
 
@@ -697,16 +693,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             display: flex;
             align-items: center;
             gap: 7px;
+            min-width: 0;
         }
 
         .cockpit-target-title {
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--text-main);
-            max-width: 130px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            max-width: 150px;
         }
 
         .cockpit-header-actions {
@@ -718,8 +715,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         /* Segmented Mode Pill */
         .mode-segmented {
             display: flex;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: var(--bg);
+            border: 1px solid var(--surface-border);
             border-radius: 6px;
             padding: 2px;
             gap: 2px;
@@ -730,22 +727,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             border: none;
             color: var(--text-muted);
             font-size: 10px;
-            font-weight: 600;
+            font-family: var(--font-mono);
+            font-weight: 500;
             padding: 2px 7px;
             border-radius: 4px;
             cursor: pointer;
-            transition: all 0.15s ease;
+            transition: all 0.12s ease;
         }
 
         .mode-pill.active {
-            background: rgba(255, 255, 255, 0.15);
-            color: white;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+            background: var(--surface-hover);
+            color: var(--text-main);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
         }
 
         .btn-icon-micro {
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.07);
+            background: var(--surface-hover);
+            border: 1px solid var(--surface-border);
             color: var(--text-muted);
             width: 26px;
             height: 26px;
@@ -754,10 +752,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             align-items: center;
             justify-content: center;
             cursor: pointer;
+            transition: all 0.12s ease;
         }
 
         .btn-icon-micro:active {
-            background: rgba(255, 255, 255, 0.12);
+            color: var(--text-main);
+            border-color: var(--surface-border-focus);
         }
 
         .cockpit-activity-content {
@@ -766,33 +766,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             padding: 14px;
             font-size: 13px;
             line-height: 1.55;
-            color: #f4f4f5;
+            color: var(--text-main);
             white-space: pre-wrap;
             word-break: break-word;
             -webkit-overflow-scrolling: touch;
+            background: var(--bg);
         }
 
         .cockpit-activity-content.raw-view {
             font-family: var(--font-mono);
             font-size: 11px;
-            color: #a1a1aa;
+            color: var(--text-muted);
             white-space: pre;
             overflow-x: auto;
-            background: #0d0d10;
         }
 
         .activity-empty {
-            color: var(--text-muted);
+            color: var(--text-dim);
             font-size: 12px;
+            font-family: var(--font-mono);
             font-style: italic;
         }
 
         /* Bottom Dictation Dialogue Bar */
         .cockpit-bottom-dock {
-            background: rgba(18, 18, 22, 0.95);
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: var(--surface);
+            border-top: 1px solid var(--surface-border);
             padding: 8px 12px calc(8px + env(safe-area-inset-bottom)) 12px;
             display: flex;
             flex-direction: column;
@@ -814,11 +813,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .chip-mini {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: var(--surface-hover);
+            border: 1px solid var(--surface-border);
             border-radius: 6px;
             color: var(--text-muted);
             font-size: 11px;
+            font-family: var(--font-sans);
             font-weight: 500;
             padding: 4px 9px;
             cursor: pointer;
@@ -827,7 +827,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .chip-mini:active {
-            background: var(--surface-hover);
+            background: var(--surface-active);
             color: var(--text-main);
             transform: scale(0.96);
         }
@@ -852,21 +852,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             min-height: 38px;
             max-height: 90px;
             resize: none;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: var(--bg);
+            border: 1px solid var(--surface-border);
             border-radius: 10px;
             color: var(--text-main);
+            font-family: var(--font-sans);
             font-size: 14px;
             padding: 9px 12px;
-            font-family: inherit;
             line-height: 1.35;
             outline: none;
-            transition: border-color 0.15s;
+            transition: border-color 0.15s ease;
         }
 
         #cockpitPrompt:focus {
             border-color: var(--surface-border-focus);
-            background: rgba(255, 255, 255, 0.09);
         }
 
         .cockpit-send-btn {
