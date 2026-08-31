@@ -21,15 +21,38 @@ logger = logging.getLogger("PromptBridge.Server")
 
 
 def get_lan_ip() -> str:
-    """Detects primary LAN IPv4 address."""
+    """Detects primary LAN IPv4 address with fallback to local interface inspection."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
-        return ip
+        if not ip.startswith("127."):
+            return ip
     except Exception:
-        return "127.0.0.1"
+        pass
+
+    try:
+        hostname = socket.gethostname()
+        for ip in socket.gethostbyname_ex(hostname)[2]:
+            if not ip.startswith("127."):
+                return ip
+    except Exception:
+        pass
+
+    return "127.0.0.1"
+
+
+def get_mdns_hostname() -> str:
+    """Returns local mDNS hostname (e.g. my-mac.local) for reliable LAN addressing."""
+    try:
+        h = socket.gethostname()
+        if not h.endswith(".local"):
+            return f"{h}.local"
+        return h
+    except Exception:
+        return ""
+
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -1122,25 +1145,48 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }
         });
 
+        let consecutivePingFails = 0;
         async function ping() {
             try {
-                const res = await fetch('/ping', { cache: 'no-store' });
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2500);
+                const res = await fetch('/ping', { cache: 'no-store', signal: controller.signal });
+                clearTimeout(timeoutId);
                 if (res.ok) {
+                    consecutivePingFails = 0;
                     statusDot.classList.remove('offline');
                 } else {
                     throw new Error();
                 }
             } catch (e) {
-                statusDot.classList.add('offline');
+                consecutivePingFails++;
+                if (consecutivePingFails >= 2) {
+                    statusDot.classList.add('offline');
+                }
             }
         }
+
+        // Instant reconnection when phone unlocks, wakes up from sleep, or tab regains focus
+        function handleMobileWakeup() {
+            consecutivePingFails = 0;
+            ping();
+            fetchTargets(false);
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                handleMobileWakeup();
+            }
+        });
+        window.addEventListener('focus', handleMobileWakeup);
+        window.addEventListener('online', handleMobileWakeup);
 
         // Initialize
         updateViewportHeight();
         ping();
         fetchTargets(true);
-        setInterval(ping, 5000);
-        setInterval(() => fetchTargets(false), 6000);
+        setInterval(ping, 4000);
+        setInterval(() => fetchTargets(false), 5000);
         updateMetrics();
     </script>
 </body>
@@ -1174,7 +1220,9 @@ class BridgeServer(ThreadingHTTPServer):
 
 
 class BridgeRequestHandler(BaseHTTPRequestHandler):
-    """Handles HTTP requests for the bridge."""
+    """Handles HTTP requests for the bridge with HTTP/1.1 keep-alive."""
+    protocol_version = "HTTP/1.1"
+    timeout = 60
 
     router: PromptRouter = None
     target_manager: TargetManager = None
@@ -1219,6 +1267,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
         try:
             self.send_response(204)
             self._send_cors_headers()
+            self.send_header("Content-Length", "0")
             self.end_headers()
         except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
             self.close_connection = True
@@ -1250,6 +1299,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                     self.send_response(401)
                     self._send_cors_headers()
                     self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", "23")
                     self.end_headers()
                     self.wfile.write(b'{"error":"Unauthorized"}')
                     return
@@ -1278,6 +1328,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             else:
                 self.send_response(404)
                 self._send_cors_headers()
+                self.send_header("Content-Length", "0")
                 self.end_headers()
         except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
             self.close_connection = True
@@ -1289,6 +1340,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             try:
                 self.send_response(404)
                 self._send_cors_headers()
+                self.send_header("Content-Length", "0")
                 self.end_headers()
             except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
                 self.close_connection = True
@@ -1296,11 +1348,13 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
 
         if not self._is_authenticated():
             try:
+                err_b = b'{"success":false,"error":"Unauthorized"}'
                 self.send_response(401)
                 self._send_cors_headers()
                 self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err_b)))
                 self.end_headers()
-                self.wfile.write(b'{"success":false,"error":"Unauthorized"}')
+                self.wfile.write(err_b)
             except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
                 self.close_connection = True
             return
@@ -1315,11 +1369,13 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             action = data.get("action", "execute")
 
             if not prompt and action not in ("interrupt", "raw_enter"):
+                err_b = b'{"success":false,"error":"Prompt cannot be empty"}'
                 self.send_response(400)
                 self._send_cors_headers()
                 self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err_b)))
                 self.end_headers()
-                self.wfile.write(b'{"success":false,"error":"Prompt cannot be empty"}')
+                self.wfile.write(err_b)
                 return
 
             req = PromptRequest(prompt=prompt, target=target_id, action=action)
@@ -1393,11 +1449,14 @@ def run(port: Optional[int] = None):
         config.port = port
 
     lan_ip = get_lan_ip()
+    mdns_host = get_mdns_hostname()
     server = create_server(config)
 
     print(f"\nPrompt Bridge running with direct Terminal Agent routing:")
     print(f"  • Local:   http://localhost:{config.port}")
-    print(f"  • Phone:   http://{lan_ip}:{config.port}\n")
+    print(f"  • Phone:   http://{lan_ip}:{config.port}")
+    if mdns_host:
+        print(f"  • mDNS:    http://{mdns_host}:{config.port}\n")
 
     try:
         server.serve_forever()
