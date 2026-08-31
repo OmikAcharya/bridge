@@ -1817,6 +1817,30 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
         except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
             self.close_connection = True
 
+    def do_HEAD(self):
+        clean_path = self.path.split("?")[0]
+        try:
+            if clean_path in ("/", "/index.html"):
+                data = HTML_TEMPLATE.encode("utf-8")
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+            elif clean_path == "/ping":
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "15")
+                self.end_headers()
+            else:
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
+            self.close_connection = True
+
     def do_GET(self):
         clean_path = self.path.split("?")[0]
 
