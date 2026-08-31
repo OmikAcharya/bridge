@@ -674,7 +674,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <textarea 
             id="prompt" 
             placeholder="Dictate with Wispr Flow or type..." 
-            autofocus 
             autocomplete="off" 
             autocorrect="on" 
             spellcheck="true"
@@ -774,8 +773,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
             document.documentElement.style.setProperty('--app-height', `${h}px`);
             
-            const isKeyboard = (window.innerHeight - h > 120) || (window.screen && window.screen.height - h > 200);
-            if (isKeyboard || document.activeElement === promptEl) {
+            if (document.activeElement === promptEl) {
                 document.body.classList.add('keyboard-active');
             } else {
                 document.body.classList.remove('keyboard-active');
@@ -790,7 +788,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         promptEl.addEventListener('focus', () => {
             document.body.classList.add('keyboard-active');
-            setTimeout(updateViewportHeight, 60);
+            setTimeout(updateViewportHeight, 50);
         });
 
         promptEl.addEventListener('blur', () => {
@@ -799,7 +797,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     document.body.classList.remove('keyboard-active');
                     updateViewportHeight();
                 }
-            }, 180);
+            }, 100);
         });
 
         if (localStorage.getItem('bridge_enter') === 'false') {
