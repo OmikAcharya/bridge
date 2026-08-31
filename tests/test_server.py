@@ -82,6 +82,26 @@ class TestServerAPI(unittest.TestCase):
         except urllib.error.HTTPError as e:
             self.assertEqual(e.code, 404)
 
+    def test_abrupt_client_disconnect(self):
+        import socket
+        # Connect and immediately close socket without sending data
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect(("127.0.0.1", self.config.port))
+        s.close()
+        time.sleep(0.05)
+
+        # Connect, send partial request line, and close socket abruptly
+        s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s2.connect(("127.0.0.1", self.config.port))
+        s2.sendall(b"POST /prompt HTTP/1.1\r\nContent-Length: 100\r\n\r\npartial")
+        s2.close()
+        time.sleep(0.05)
+
+        # Server should still be healthy and responding
+        url = f"http://127.0.0.1:{self.config.port}/ping"
+        with urllib.request.urlopen(url) as resp:
+            self.assertEqual(resp.status, 200)
+
 
 class TestServerAuth(unittest.TestCase):
     @classmethod

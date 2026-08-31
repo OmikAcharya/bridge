@@ -2,11 +2,12 @@
 HTTP Server and Web Interface for Prompt Bridge.
 """
 
+import sys
 import os
 import json
 import socket
 import logging
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import Optional
 
 from bridge.models import PromptRequest, DeliveryResult
@@ -1147,6 +1148,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+class BridgeServer(ThreadingHTTPServer):
+    """Threading HTTP server with graceful client disconnect handling."""
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def handle_error(self, request, client_address):
+        """Suppress noisy tracebacks for normal socket disconnects/resets."""
+        exc_type, exc_val, _ = sys.exc_info()
+        if exc_type and (
+            issubclass(exc_type, (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, TimeoutError, socket.error))
+            or isinstance(exc_val, (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, TimeoutError, socket.error))
+        ):
+            logger.debug("Client connection reset/aborted (%s): %s", client_address, exc_val)
+            return
+        super().handle_error(request, client_address)
+
+
 class BridgeRequestHandler(BaseHTTPRequestHandler):
     """Handles HTTP requests for the bridge."""
 
@@ -1156,6 +1174,21 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         return
+
+    def handle(self):
+        """Handle incoming connection, suppressing abrupt client resets."""
+        try:
+            super().handle()
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, TimeoutError, socket.error) as e:
+            logger.debug("Client connection closed abruptly (%s): %s", self.client_address, e)
+
+    def handle_one_request(self):
+        """Handle a single HTTP request, catching disconnects during header read."""
+        try:
+            super().handle_one_request()
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, TimeoutError, socket.error) as e:
+            self.close_connection = True
+            logger.debug("Client reset connection during request parse (%s): %s", self.client_address, e)
 
     def _send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -1175,81 +1208,93 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
         return False
 
     def do_OPTIONS(self):
-        self.send_response(204)
-        self._send_cors_headers()
-        self.end_headers()
+        try:
+            self.send_response(204)
+            self._send_cors_headers()
+            self.end_headers()
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
+            self.close_connection = True
 
     def do_GET(self):
         clean_path = self.path.split("?")[0]
 
-        if clean_path in ("/", "/index.html"):
-            data = HTML_TEMPLATE.encode("utf-8")
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+        try:
+            if clean_path in ("/", "/index.html"):
+                data = HTML_TEMPLATE.encode("utf-8")
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
 
-        elif clean_path == "/ping":
-            data = b'{"status":"ok"}'
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
-
-        elif clean_path == "/targets":
-            if not self._is_authenticated():
-                self.send_response(401)
+            elif clean_path == "/ping":
+                data = b'{"status":"ok"}'
+                self.send_response(200)
                 self._send_cors_headers()
                 self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
-                self.wfile.write(b'{"error":"Unauthorized"}')
-                return
+                self.wfile.write(data)
 
-            targets = self.target_manager.get_targets() if self.target_manager else []
-            targets_dict = [t.to_dict() for t in targets]
+            elif clean_path == "/targets":
+                if not self._is_authenticated():
+                    self.send_response(401)
+                    self._send_cors_headers()
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"Unauthorized"}')
+                    return
 
-            default_t = "auto"
-            for t in targets:
-                if t.agent in ("claude", "codex", "opencode", "aider", "agy") and t.id != "focused":
-                    default_t = t.id
-                    break
+                targets = self.target_manager.get_targets() if self.target_manager else []
+                targets_dict = [t.to_dict() for t in targets]
 
-            payload = json.dumps({
-                "targets": targets_dict,
-                "default_target": default_t
-            }).encode("utf-8")
+                default_t = "auto"
+                for t in targets:
+                    if t.agent in ("claude", "codex", "opencode", "aider", "agy") and t.id != "focused":
+                        default_t = t.id
+                        break
 
-            self.send_response(200)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+                payload = json.dumps({
+                    "targets": targets_dict,
+                    "default_target": default_t
+                }).encode("utf-8")
 
-        else:
-            self.send_response(404)
-            self._send_cors_headers()
-            self.end_headers()
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            else:
+                self.send_response(404)
+                self._send_cors_headers()
+                self.end_headers()
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
+            self.close_connection = True
 
     def do_POST(self):
         clean_path = self.path.split("?")[0]
 
         if clean_path != "/prompt":
-            self.send_response(404)
-            self._send_cors_headers()
-            self.end_headers()
+            try:
+                self.send_response(404)
+                self._send_cors_headers()
+                self.end_headers()
+            except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
+                self.close_connection = True
             return
 
         if not self._is_authenticated():
-            self.send_response(401)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"success":false,"error":"Unauthorized"}')
+            try:
+                self.send_response(401)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"success":false,"error":"Unauthorized"}')
+            except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
+                self.close_connection = True
             return
 
         try:
@@ -1282,19 +1327,35 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(resp_bytes)
 
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
+            self.close_connection = True
+        except json.JSONDecodeError as e:
+            try:
+                err_payload = json.dumps({"success": False, "error": f"Invalid JSON body: {str(e)}"}).encode("utf-8")
+                self.send_response(400)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err_payload)))
+                self.end_headers()
+                self.wfile.write(err_payload)
+            except Exception:
+                self.close_connection = True
         except Exception as e:
             logger.exception("Error handling /prompt POST")
-            err_payload = json.dumps({"success": False, "error": str(e)}).encode("utf-8")
-            self.send_response(500)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(err_payload)))
-            self.end_headers()
-            self.wfile.write(err_payload)
+            try:
+                err_payload = json.dumps({"success": False, "error": str(e)}).encode("utf-8")
+                self.send_response(500)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err_payload)))
+                self.end_headers()
+                self.wfile.write(err_payload)
+            except Exception:
+                self.close_connection = True
 
 
-def create_server(config: Optional[Config] = None) -> HTTPServer:
-    """Creates and configures the Prompt Bridge HTTPServer instance."""
+def create_server(config: Optional[Config] = None) -> BridgeServer:
+    """Creates and configures the Prompt Bridge server instance."""
     if config is None:
         config = Config()
 
@@ -1307,7 +1368,7 @@ def create_server(config: Optional[Config] = None) -> HTTPServer:
     BridgeRequestHandler.target_manager = target_manager
     BridgeRequestHandler.config = config
 
-    server = HTTPServer(("0.0.0.0", config.port), BridgeRequestHandler)
+    server = BridgeServer(("0.0.0.0", config.port), BridgeRequestHandler)
     return server
 
 
@@ -1326,7 +1387,7 @@ def run(port: Optional[int] = None):
     lan_ip = get_lan_ip()
     server = create_server(config)
 
-    print(f"\n⚡ Prompt Bridge running with direct Terminal Agent routing:")
+    print(f"\nPrompt Bridge running with direct Terminal Agent routing:")
     print(f"  • Local:   http://localhost:{config.port}")
     print(f"  • Phone:   http://{lan_ip}:{config.port}\n")
 
