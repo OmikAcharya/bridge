@@ -7,6 +7,7 @@ import os
 import json
 import socket
 import logging
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import Optional
 
@@ -14,8 +15,9 @@ from bridge.models import PromptRequest, DeliveryResult
 from bridge.config import Config
 from bridge.discovery import SessionDiscovery
 from bridge.targets import TargetManager
-from bridge.adapters.factory import AdapterFactory
+from bridge.adapters.factory import AdapterFactory, get_adapter
 from bridge.router import PromptRouter
+from bridge.compressor import compress_caveman_ultra, format_raw_tail
 
 logger = logging.getLogger("PromptBridge.Server")
 
@@ -541,6 +543,129 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             transform: none;
         }
 
+        /* Terminal Activity Closed-Loop Feedback */
+        .activity-container {
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: var(--radius-sm);
+            padding: 9px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            margin-top: 4px;
+            flex-shrink: 0;
+            transition: max-height 0.2s ease, opacity 0.2s ease;
+        }
+
+        .keyboard-active .activity-container {
+            display: none;
+        }
+
+        .activity-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .activity-title-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .activity-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green-glow);
+        }
+
+        .activity-dot.busy {
+            background: var(--blue);
+            box-shadow: 0 0 6px rgba(59, 130, 246, 0.4);
+            animation: pulse 1.5s infinite;
+        }
+
+        .activity-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+        }
+
+        .activity-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mini-toggle {
+            font-size: 11px;
+            color: var(--text-muted);
+            gap: 5px;
+        }
+
+        .mini-toggle .toggle-switch {
+            width: 28px;
+            height: 16px;
+        }
+
+        .mini-toggle .toggle-switch::after {
+            width: 12px;
+            height: 12px;
+        }
+
+        .mini-toggle input:checked + .toggle-switch::after {
+            transform: translateX(12px);
+        }
+
+        .btn-icon-micro {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--surface-border);
+            color: var(--text-muted);
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .btn-icon-micro:active {
+            background: var(--surface-hover);
+        }
+
+        .activity-content {
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 8px 10px;
+            max-height: 130px;
+            overflow-y: auto;
+            font-size: 12px;
+            line-height: 1.45;
+            color: var(--text-main);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .activity-content.raw-view {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: #d4d4d8;
+            white-space: pre;
+            overflow-x: auto;
+        }
+
+        .activity-empty {
+            color: var(--text-muted);
+            font-style: italic;
+            font-size: 11px;
+        }
+
         /* History Modal */
         .modal-overlay {
             position: fixed;
@@ -670,6 +795,33 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <span id="miniTargetPath">~/Developer/bridge</span>
     </div>
 
+    <!-- Terminal Activity Feedback Panel -->
+    <div id="activityContainer" class="activity-container">
+        <div class="activity-header">
+            <div class="activity-title-group">
+                <div id="agentStatusDot" class="activity-dot"></div>
+                <span class="activity-title">Live Agent Activity</span>
+            </div>
+            <div class="activity-controls">
+                <label class="toggle-label mini-toggle">
+                    <input type="checkbox" id="cavemanModeToggle" checked>
+                    <span class="toggle-switch"></span>
+                    <span id="cavemanModeLabel">Caveman Ultra</span>
+                </label>
+                <button id="refreshActivityBtn" class="btn-icon-micro" title="Refresh Output">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div id="activityContent" class="activity-content caveman-view">
+            <div class="activity-empty">Listening to terminal session...</div>
+        </div>
+    </div>
+
     <!-- Editor -->
     <div class="editor-container">
         <textarea 
@@ -762,11 +914,54 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const btnNo = document.getElementById('btnNo');
         const btnInterrupt = document.getElementById('btnInterrupt');
 
+        const activityContent = document.getElementById('activityContent');
+        const cavemanModeToggle = document.getElementById('cavemanModeToggle');
+        const cavemanModeLabel = document.getElementById('cavemanModeLabel');
+        const agentStatusDot = document.getElementById('agentStatusDot');
+        const refreshActivityBtn = document.getElementById('refreshActivityBtn');
+
         let lastCleared = '';
         let availableTargets = [];
         let selectedTargetId = localStorage.getItem('bridge_target_id') || 'auto';
         let promptHistory = JSON.parse(localStorage.getItem('bridge_prompt_history') || '[]');
         let lastSignature = '';
+
+        let isCavemanUltra = localStorage.getItem('bridge_caveman_output') !== 'false';
+        cavemanModeToggle.checked = isCavemanUltra;
+        cavemanModeLabel.textContent = isCavemanUltra ? 'Caveman Ultra' : 'Raw Output';
+        activityContent.className = isCavemanUltra ? 'activity-content caveman-view' : 'activity-content raw-view';
+
+        cavemanModeToggle.addEventListener('change', () => {
+            isCavemanUltra = cavemanModeToggle.checked;
+            localStorage.setItem('bridge_caveman_output', isCavemanUltra);
+            cavemanModeLabel.textContent = isCavemanUltra ? 'Caveman Ultra' : 'Raw Output';
+            activityContent.className = isCavemanUltra ? 'activity-content caveman-view' : 'activity-content raw-view';
+            fetchActivityTail();
+            haptic(10);
+        });
+
+        refreshActivityBtn.addEventListener('click', () => {
+            fetchActivityTail();
+            haptic(10);
+        });
+
+        async function fetchActivityTail() {
+            try {
+                const mode = isCavemanUltra ? 'ultra' : 'raw';
+                const res = await fetch(`/terminal/tail?target=${encodeURIComponent(selectedTargetId)}&mode=${mode}&lines=40`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.success && data.content) {
+                    activityContent.textContent = data.content;
+                    if (data.is_busy) {
+                        agentStatusDot.classList.add('busy');
+                    } else {
+                        agentStatusDot.classList.remove('busy');
+                    }
+                    activityContent.scrollTop = activityContent.scrollHeight;
+                }
+            } catch (e) {}
+        }
 
         // Dynamic Viewport & Purely Height-Driven Grid Collapse
         let baseViewportHeight = window.innerHeight;
@@ -1079,6 +1274,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     updateMetrics();
                 }
 
+                setTimeout(fetchActivityTail, 400);
+
                 setTimeout(() => {
                     sendBtn.classList.remove('success');
                     sendBtn.disabled = false;
@@ -1139,8 +1336,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         updateViewportHeight();
         ping();
         fetchTargets(true);
+        fetchActivityTail();
         setInterval(ping, 5000);
         setInterval(() => fetchTargets(false), 6000);
+        setInterval(fetchActivityTail, 2500);
         updateMetrics();
     </script>
 </body>
@@ -1266,6 +1465,59 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 payload = json.dumps({
                     "targets": targets_dict,
                     "default_target": default_t
+                }).encode("utf-8")
+
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            elif clean_path == "/terminal/tail":
+                if not self._is_authenticated():
+                    self.send_response(401)
+                    self._send_cors_headers()
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"Unauthorized"}')
+                    return
+
+                parsed_url = urllib.parse.urlparse(self.path)
+                params = urllib.parse.parse_qs(parsed_url.query)
+                target_id = params.get("target", ["auto"])[0]
+                mode = params.get("mode", ["ultra"])[0].lower()
+                try:
+                    lines_count = int(params.get("lines", ["40"])[0])
+                except ValueError:
+                    lines_count = 40
+
+                target = self.target_manager.resolve(target_id) if self.target_manager else None
+                if not target:
+                    err_payload = json.dumps({"success": False, "error": f"Target '{target_id}' not found."}).encode("utf-8")
+                    self.send_response(404)
+                    self._send_cors_headers()
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(err_payload)))
+                    self.end_headers()
+                    self.wfile.write(err_payload)
+                    return
+
+                adapter = get_adapter(target)
+                raw_history = adapter.get_history(target, lines=max(lines_count, 50))
+                
+                if mode == "ultra":
+                    content = compress_caveman_ultra(raw_history)
+                else:
+                    content = format_raw_tail(raw_history, lines=lines_count)
+
+                payload = json.dumps({
+                    "success": True,
+                    "target_id": target.id,
+                    "target_name": target.name,
+                    "mode": mode,
+                    "content": content,
+                    "is_busy": target.is_busy
                 }).encode("utf-8")
 
                 self.send_response(200)

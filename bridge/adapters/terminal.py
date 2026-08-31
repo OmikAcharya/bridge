@@ -180,3 +180,50 @@ class AppleTerminalAdapter(TerminalAdapter):
                 adapter_used=self.name,
                 error=f"Unexpected error: {str(e)}"
             )
+
+    def get_history(self, target: Target, lines: int = 50) -> str:
+        """Retrieves recent terminal output history from the target tab."""
+        tty = target.tty
+        win_idx = target.win_idx
+        tab_idx = target.tab_idx
+        tab_finder = f'''
+        set foundTab to missing value
+        if {win_idx if win_idx else 0} > 0 and {tab_idx if tab_idx else 0} > 0 then
+            try
+                set candTab to tab {tab_idx} of window {win_idx}
+                if "{tty}" is "" or tty of candTab is "{tty}" then
+                    set foundTab to candTab
+                end if
+            end try
+        end if
+        if foundTab is missing value and "{tty}" is not "" then
+            repeat with w in windows
+                repeat with t in tabs of w
+                    if tty of t is "{tty}" then
+                        set foundTab to t
+                        exit repeat
+                    end if
+                end repeat
+                if foundTab is not missing value then exit repeat
+            end repeat
+        end if
+        '''
+        script = f'''
+        tell application "Terminal"
+            {tab_finder}
+            if foundTab is not missing value then
+                return history of foundTab
+            else
+                return ""
+            end if
+        end tell
+        '''
+        try:
+            res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=3.0)
+            if res.returncode == 0 and res.stdout:
+                raw_lines = res.stdout.splitlines()
+                return "\n".join(raw_lines[-lines:])
+        except Exception:
+            pass
+        return ""
+

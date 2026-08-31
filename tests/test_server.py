@@ -61,6 +61,16 @@ class TestServerAPI(unittest.TestCase):
             targets = data["targets"]
             self.assertTrue(any(t["id"] == "focused" for t in targets))
 
+    def test_get_terminal_tail(self):
+        url = f"http://127.0.0.1:{self.config.port}/terminal/tail?target=focused&mode=ultra"
+        with urllib.request.urlopen(url) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertTrue(data["success"])
+            self.assertEqual(data["mode"], "ultra")
+            self.assertIn("content", data)
+
+
     def test_post_prompt_empty(self):
         url = f"http://127.0.0.1:{self.config.port}/prompt"
         payload = json.dumps({"target": "focused", "prompt": ""}).encode("utf-8")
