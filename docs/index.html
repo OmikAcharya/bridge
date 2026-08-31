@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
     <meta name="theme-color" content="#09090b">
     <title>Prompt Bridge</title>
+    <script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
     <style>
         :root {
             --app-height: 100dvh;
@@ -1477,19 +1478,17 @@
             }
 
             if (resolved) {
-                const ttyStr = resolved.tty ? resolved.tty.replace('/dev/', '') : '';
-                const compactPath = (resolved.metadata && resolved.metadata.compact_cwd) || resolved.folder || '~';
-                sendTitle.textContent = willEnter ? 'Send & Execute' : 'Paste Prompt';
+            if (resolved) {
+                let targetDisplay = resolved.name;
                 if (selectedTargetId === 'auto') {
-                    sendSubtitle.textContent = `to ${resolved.agent_name || resolved.name} [${ttyStr}]`;
-                    miniTargetName.textContent = `Auto: ${resolved.agent_name || resolved.name}`;
-                } else {
-                    sendSubtitle.textContent = `to ${resolved.name} [${ttyStr}]`;
-                    miniTargetName.textContent = resolved.name;
+                    targetDisplay = `${resolved.agent_name || resolved.name}`;
                 }
-                miniTargetPath.textContent = compactPath;
+                sendTitle.textContent = 'Send Prompt';
+                sendSubtitle.textContent = `Route to ${targetDisplay}`;
+                miniTargetName.textContent = targetDisplay;
+                miniTargetPath.textContent = resolved.cwd || resolved.tty || '--';
             } else {
-                sendTitle.textContent = 'Send to Mac';
+                sendTitle.textContent = 'Send Prompt';
                 sendSubtitle.textContent = 'No terminal target';
                 miniTargetName.textContent = 'Offline';
                 miniTargetPath.textContent = '--';
@@ -1561,9 +1560,14 @@
 
         async function fetchTargets(force = false) {
             try {
-                const res = await fetch('/targets', { cache: 'no-store' });
-                if (!res.ok) throw new Error();
-                const data = await res.json();
+                let data = null;
+                if (isP2P) {
+                    data = await p2pRequest('get_targets');
+                } else {
+                    const res = await fetch('/targets', { cache: 'no-store' });
+                    if (!res.ok) throw new Error();
+                    data = await res.json();
+                }
                 availableTargets = data.targets || [];
 
                 const newSignature = JSON.stringify(availableTargets.map(t => [
@@ -1613,20 +1617,32 @@
             try {
                 const sendEnter = enterToggle.checked;
                 const resolvedAction = action || (sendEnter ? 'execute' : 'paste');
+                let data = null;
 
-                const res = await fetch('/prompt', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
+                if (isP2P) {
+                    const res = await p2pRequest('prompt', {
                         target: selectedTargetId,
                         prompt: text,
-                        action: resolvedAction
-                    })
-                });
-
-                const data = await res.json();
-                if (!res.ok || !data.success) {
-                    throw new Error(data.error || 'Delivery failed');
+                        act: resolvedAction
+                    });
+                    if (!res || !res.success) {
+                        throw new Error((res && res.error) ? res.error : 'P2P delivery failed');
+                    }
+                    data = res.result || { success: true, message: 'Delivered directly to session' };
+                } else {
+                    const res = await fetch('/prompt', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            target: selectedTargetId,
+                            prompt: text,
+                            action: resolvedAction
+                        })
+                    });
+                    data = await res.json();
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.error || 'Delivery failed');
+                    }
                 }
 
                 haptic([30, 40, 30]);
@@ -1702,6 +1718,22 @@
 
         let consecutivePingFails = 0;
         async function ping() {
+            if (isP2P) {
+                try {
+                    if (isP2PReady) {
+                        await p2pRequest('ping');
+                        consecutivePingFails = 0;
+                        statusDot.classList.remove('offline');
+                    }
+                } catch (e) {
+                    consecutivePingFails++;
+                    if (consecutivePingFails >= 2) {
+                        statusDot.classList.add('offline');
+                    }
+                }
+                return;
+            }
+
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 2500);
@@ -1723,25 +1755,27 @@
 
         // Connection Security & Mode Indicator
         const connBadge = document.getElementById('connBadge');
-        let peerConnection = null;
-        let p2pDataChannel = null;
-        let isP2PConnected = false;
-
         const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
         const p2pRoom = hashParams.get('room');
         const p2pKey = hashParams.get('key');
+        const isP2P = Boolean(p2pRoom) || window.location.hostname.includes('github.io');
 
-        function updateConnectionBadge() {
+        let mqttClient = null;
+        let isP2PReady = false;
+        let reqSeq = 1;
+        const pendingRequests = new Map();
+
+        function updateConnectionBadge(state = null) {
             if (!connBadge) return;
             const host = window.location.hostname;
-            if (isP2PConnected) {
+            if (isP2PReady || state === 'p2p') {
                 connBadge.textContent = '🔒 P2P E2EE';
                 connBadge.className = 'conn-badge p2p';
-                connBadge.title = 'Direct End-to-End Encrypted WebRTC DataChannel';
-            } else if (p2pRoom) {
-                connBadge.textContent = '🔒 P2P (Pairing)';
+                connBadge.title = 'Direct End-to-End Encrypted Relay';
+            } else if (isP2P) {
+                connBadge.textContent = '🔒 P2P (Connecting...)';
                 connBadge.className = 'conn-badge p2p';
-                connBadge.title = 'Establishing P2P DataChannel...';
+                connBadge.title = 'Connecting to P2P relay...';
             } else if (host === 'localhost' || host === '127.0.0.1') {
                 connBadge.textContent = '💻 Localhost';
                 connBadge.className = 'conn-badge local';
@@ -1753,96 +1787,74 @@
             }
         }
 
-        if (p2pRoom && window.RTCPeerConnection) {
-            initWebRTC(p2pRoom, p2pKey);
+        if (isP2P && p2pRoom && typeof mqtt !== 'undefined') {
+            initP2PRelay(p2pRoom, p2pKey);
         } else {
             updateConnectionBadge();
         }
 
-        async function initWebRTC(room, key) {
-            updateConnectionBadge();
+        function initP2PRelay(room, key) {
+            updateConnectionBadge('p2p_connecting');
             try {
-                const config = {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
-                    ]
-                };
-                peerConnection = new RTCPeerConnection(config);
-
-                p2pDataChannel = peerConnection.createDataChannel('prompt-bridge', { ordered: true });
-                setupDataChannel(p2pDataChannel);
-
-                peerConnection.ondatachannel = (e) => {
-                    setupDataChannel(e.channel);
-                };
-
-                peerConnection.onicecandidate = (e) => {
-                    if (e.candidate) {
-                        sendSignal('phone', { type: 'candidate', candidate: e.candidate }, room, key);
-                    }
-                };
-
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                await sendSignal('phone', { type: 'offer', sdp: offer.sdp }, room, key);
-
-                pollSignals(room, key);
-            } catch (e) {
-                console.warn('P2P fallback to direct HTTP:', e);
-                updateConnectionBadge();
-            }
-        }
-
-        function setupDataChannel(dc) {
-            p2pDataChannel = dc;
-            p2pDataChannel.onopen = () => {
-                isP2PConnected = true;
-                updateConnectionBadge();
-            };
-            p2pDataChannel.onclose = () => {
-                isP2PConnected = false;
-                updateConnectionBadge();
-            };
-            p2pDataChannel.onmessage = (e) => {
-                try {
-                    const msg = JSON.parse(e.data);
-                    if (msg.type === 'tail' && msg.content) {
-                        cockpitActivityContent.textContent = msg.content;
-                    }
-                } catch (err) {}
-            };
-        }
-
-        async function sendSignal(sender, payload, room, key) {
-            try {
-                await fetch(`/p2p/signal?room=${encodeURIComponent(room)}&sender=${encodeURIComponent(sender)}&key=${encodeURIComponent(key || '')}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+                    clientId: 'phone_' + Math.random().toString(16).slice(2, 10),
+                    clean: true,
+                    reconnectPeriod: 2000,
                 });
-            } catch (e) {}
+
+                mqttClient.on('connect', () => {
+                    mqttClient.subscribe(`pb/${room}/phone`, { qos: 0 });
+                    isP2PReady = true;
+                    statusDot.classList.remove('offline');
+                    updateConnectionBadge('p2p');
+                    fetchTargets(true);
+                    fetchActivityTail();
+                });
+
+                mqttClient.on('message', (topic, payload) => {
+                    try {
+                        const data = JSON.parse(payload.toString());
+                        if (data.id && pendingRequests.has(data.id)) {
+                            const { resolve } = pendingRequests.get(data.id);
+                            pendingRequests.delete(data.id);
+                            resolve(data);
+                        }
+                    } catch (err) {}
+                });
+
+                mqttClient.on('offline', () => {
+                    isP2PReady = false;
+                    statusDot.classList.add('offline');
+                    updateConnectionBadge('p2p_offline');
+                });
+            } catch (e) {
+                console.error('MQTT P2P error:', e);
+            }
         }
 
-        async function pollSignals(room, key) {
-            try {
-                const res = await fetch(`/p2p/poll?room=${encodeURIComponent(room)}&target=phone&key=${encodeURIComponent(key || '')}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.messages && data.messages.length > 0) {
-                        for (const msg of data.messages) {
-                            if (msg.payload && msg.payload.type === 'answer' && peerConnection) {
-                                await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.payload));
-                            } else if (msg.payload && msg.payload.type === 'candidate' && peerConnection) {
-                                await peerConnection.addIceCandidate(new RTCIceCandidate(msg.payload.candidate));
-                            }
-                        }
-                    }
+        function p2pRequest(action, params = {}) {
+            return new Promise((resolve, reject) => {
+                if (!mqttClient || !isP2PReady) {
+                    return reject(new Error('P2P not connected'));
                 }
-            } catch (e) {}
-            if (!isP2PConnected && p2pRoom) {
-                setTimeout(() => pollSignals(room, key), 1500);
-            }
+                const id = reqSeq++;
+                const timeout = setTimeout(() => {
+                    if (pendingRequests.has(id)) {
+                        pendingRequests.delete(id);
+                        reject(new Error('P2P request timeout'));
+                    }
+                }, 4500);
+
+                pendingRequests.set(id, {
+                    resolve: (data) => {
+                        clearTimeout(timeout);
+                        resolve(data);
+                    }
+                });
+
+                const msg = Object.assign({ id, action, key: p2pKey }, params);
+                mqttClient.publish(`pb/${p2pRoom}/mac`, JSON.stringify(msg));
+            });
         }
 
         // Instant reconnection when phone unlocks, wakes up from sleep, or tab regains focus

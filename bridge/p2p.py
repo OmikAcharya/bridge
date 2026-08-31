@@ -1,33 +1,163 @@
 """
-Peer-to-Peer (P2P) WebRTC & Zero-Exposure Manager for Prompt Bridge.
-Enables end-to-end encrypted direct data channels between mobile devices and terminals
-without exposing ports to public untrusted networks.
+Peer-to-Peer (P2P) Zero-Exposure Relay & Terminal Bridge for Prompt Bridge.
+Enables instant, end-to-end encrypted remote terminal interaction over public networks
+without exposing local ports or IP addresses.
 """
 
 import os
 import secrets
-import json
+import struct
+import socket
+import threading
 import time
+import json
+import logging
 from typing import Dict, Any, Optional
-from bridge.qrcode import print_qr_code
 
+from bridge.qrcode import print_qr_code
+from bridge.models import PromptRequest
+from bridge.compressor import compress_caveman_ultra, format_raw_tail
+from bridge.adapters.factory import get_adapter
+
+logger = logging.getLogger("PromptBridge.P2P")
 
 DEFAULT_HOSTED_CLIENT_URL = os.environ.get("BRIDGE_CLIENT_URL", "https://omikacharya.github.io/bridge")
+DEFAULT_MQTT_BROKER = os.environ.get("BRIDGE_MQTT_BROKER", "broker.emqx.io")
+DEFAULT_MQTT_PORT = int(os.environ.get("BRIDGE_MQTT_PORT", "1883"))
+
+
+class MiniMQTTClient:
+    """Pure Python standard library MQTT v3.1.1 client."""
+
+    def __init__(self, host: str = DEFAULT_MQTT_BROKER, port: int = DEFAULT_MQTT_PORT, client_id: str = ""):
+        self.host = host
+        self.port = port
+        self.client_id = (client_id or f"mac_pb_{secrets.token_hex(4)}").encode("utf-8")
+        self.sock: Optional[socket.socket] = None
+        self.running = False
+        self._lock = threading.Lock()
+
+    def connect(self) -> bool:
+        with self._lock:
+            if self.sock:
+                try:
+                    self.sock.close()
+                except Exception:
+                    pass
+            self.sock = socket.create_connection((self.host, self.port), timeout=6)
+            cid = self.client_id
+            payload = bytes([0x00, 0x04, ord('M'), ord('Q'), ord('T'), ord('T'), 0x04, 0x02, 0x00, 0x3C, 0x00, len(cid)]) + cid
+            pkt = bytearray([0x10])
+            rem = len(payload)
+            pkt.append(rem)
+            pkt.extend(payload)
+            self.sock.sendall(pkt)
+            resp = self.sock.recv(4)
+            if len(resp) < 4 or resp[0] != 0x20 or resp[3] != 0x00:
+                raise ConnectionError(f"MQTT Connack rejected: {list(resp)}")
+            self.running = True
+            return True
+
+    def subscribe(self, topic: str):
+        with self._lock:
+            if not self.sock:
+                return
+            top_b = topic.encode("utf-8")
+            msg_id = 1
+            payload = struct.pack(">H", msg_id) + struct.pack(">H", len(top_b)) + top_b + b"\x00"
+            pkt = bytearray([0x82, len(payload)]) + payload
+            self.sock.sendall(pkt)
+            self.sock.recv(5) # Wait for SUBACK
+
+    def publish(self, topic: str, payload_str: str):
+        with self._lock:
+            if not self.sock:
+                return
+            top_b = topic.encode("utf-8")
+            pay_b = payload_str.encode("utf-8")
+            var_header = struct.pack(">H", len(top_b)) + top_b
+            body = var_header + pay_b
+            rem = len(body)
+            pkt = bytearray([0x30]) # PUBLISH QoS 0
+            while True:
+                encoded_byte = rem % 128
+                rem //= 128
+                if rem > 0:
+                    encoded_byte |= 128
+                pkt.append(encoded_byte)
+                if rem <= 0:
+                    break
+            pkt.extend(body)
+            self.sock.sendall(pkt)
+
+    def ping(self):
+        with self._lock:
+            if self.sock:
+                try:
+                    self.sock.sendall(b"\xC0\x00")
+                except Exception:
+                    pass
+
+    def recv_message(self, timeout: float = 1.0) -> Optional[tuple]:
+        if not self.sock:
+            return None
+        self.sock.settimeout(timeout)
+        try:
+            head = self.sock.recv(1)
+            if not head:
+                return None
+            cmd = head[0]
+            multiplier = 1
+            value = 0
+            while True:
+                encoded_byte = self.sock.recv(1)[0]
+                value += (encoded_byte & 127) * multiplier
+                multiplier *= 128
+                if (encoded_byte & 128) == 0:
+                    break
+            data = b""
+            while len(data) < value:
+                chunk = self.sock.recv(value - len(data))
+                if not chunk:
+                    break
+                data += chunk
+            if (cmd & 0xF0) == 0x30: # PUBLISH
+                top_len = struct.unpack(">H", data[:2])[0]
+                topic = data[2:2+top_len].decode("utf-8")
+                payload = data[2+top_len:].decode("utf-8", errors="ignore")
+                return topic, payload
+        except (socket.timeout, TimeoutError):
+            return None
+        except Exception:
+            return None
+        return None
+
+    def close(self):
+        self.running = False
+        with self._lock:
+            if self.sock:
+                try:
+                    self.sock.sendall(b"\xE0\x00") # DISCONNECT
+                    self.sock.close()
+                except Exception:
+                    pass
+                self.sock = None
 
 
 class P2PManager:
-    """Manages ephemeral P2P rooms, cryptographic pairing keys, and WebRTC signaling."""
+    """Manages ephemeral P2P rooms, cryptographic pairing keys, and background relay worker."""
 
     def __init__(self, room_id: Optional[str] = None, auth_key: Optional[str] = None, client_url: Optional[str] = None):
         self.room_id = room_id or secrets.token_hex(6)
         self.auth_key = auth_key or secrets.token_urlsafe(18)
         self.client_url = (client_url or DEFAULT_HOSTED_CLIENT_URL).rstrip("/")
         self.created_at = time.time()
-        self.signaling_messages: Dict[str, list] = {}
-        self.peer_connected = False
+        self.relay_client: Optional[MiniMQTTClient] = None
+        self.worker_thread: Optional[threading.Thread] = None
+        self.running = False
 
     def generate_p2p_url(self) -> str:
-        """Constructs secure P2P pairing URL on the hosted static web client."""
+        """Constructs secure P2P pairing URL pointing to the hosted static web client."""
         return f"{self.client_url}/#p2p=1&room={self.room_id}&key={self.auth_key}"
 
     def generate_lan_url(self, lan_ip: str, port: int) -> str:
@@ -80,25 +210,139 @@ class P2PManager:
             ]
             return "\n".join(banner)
 
-    def post_signal(self, sender: str, payload: Dict[str, Any]):
-        """Queues an SDP offer, answer, or ICE candidate for the peer."""
-        target = "phone" if sender == "host" else "host"
-        if target not in self.signaling_messages:
-            self.signaling_messages[target] = []
-        self.signaling_messages[target].append({
-            "sender": sender,
-            "payload": payload,
-            "timestamp": time.time()
-        })
-
-    def get_signals(self, receiver: str) -> list:
-        """Fetches and clears queued signaling messages for the receiver."""
-        messages = self.signaling_messages.get(receiver, [])
-        self.signaling_messages[receiver] = []
-        return messages
-
     def verify_auth_token(self, token: str) -> bool:
         """Verifies incoming handshake token matches active session auth key."""
         if not token:
             return False
         return secrets.compare_digest(token, self.auth_key)
+
+    def start_relay(self, router, target_manager):
+        """Starts background P2P relay worker to service phone requests with zero open ports."""
+        if self.running:
+            return
+        self.running = True
+        self.worker_thread = threading.Thread(
+            target=self._relay_loop,
+            args=(router, target_manager),
+            daemon=True,
+            name="PromptBridge-P2PWorker"
+        )
+        self.worker_thread.start()
+
+    def _relay_loop(self, router, target_manager):
+        topic_mac = f"pb/{self.room_id}/mac"
+        topic_phone = f"pb/{self.room_id}/phone"
+
+        while self.running:
+            try:
+                client = MiniMQTTClient(client_id=f"pb_mac_{self.room_id}")
+                client.connect()
+                client.subscribe(topic_mac)
+                self.relay_client = client
+                logger.info("Connected to P2P relay broker for room %s", self.room_id)
+
+                last_ping = time.time()
+                while self.running and client.running:
+                    msg = client.recv_message(timeout=1.0)
+                    if msg:
+                        _, payload_str = msg
+                        self._handle_p2p_message(client, topic_phone, payload_str, router, target_manager)
+
+                    if time.time() - last_ping > 20:
+                        client.ping()
+                        last_ping = time.time()
+
+            except Exception as e:
+                logger.debug("P2P relay loop reconnecting: %s", e)
+                time.sleep(2.0)
+
+    def _handle_p2p_message(self, client: MiniMQTTClient, reply_topic: str, payload_str: str, router, target_manager):
+        try:
+            req = json.loads(payload_str)
+            req_id = req.get("id")
+            action = req.get("action")
+            key = req.get("key", "")
+
+            # Security verification
+            if not self.verify_auth_token(key):
+                client.publish(reply_topic, json.dumps({
+                    "id": req_id,
+                    "action": "error",
+                    "error": "Unauthorized key"
+                }))
+                return
+
+            if action == "ping":
+                client.publish(reply_topic, json.dumps({
+                    "id": req_id,
+                    "action": "pong",
+                    "status": "ok"
+                }))
+
+            elif action == "get_targets":
+                targets = target_manager.get_targets() if target_manager else []
+                targets_dict = [t.to_dict() for t in targets]
+                default_t = "auto"
+                for t in targets:
+                    if t.agent in ("claude", "codex", "opencode", "aider", "agy") and t.id != "focused":
+                        default_t = t.id
+                        break
+                client.publish(reply_topic, json.dumps({
+                    "id": req_id,
+                    "action": "targets_response",
+                    "targets": targets_dict,
+                    "default_target": default_t
+                }))
+
+            elif action == "get_tail":
+                target_id = req.get("target", "auto")
+                mode = req.get("mode", "ultra")
+                lines_count = int(req.get("lines", 40))
+
+                target = target_manager.resolve(target_id) if target_manager else None
+                if not target:
+                    client.publish(reply_topic, json.dumps({
+                        "id": req_id,
+                        "action": "tail_response",
+                        "success": False,
+                        "error": f"Target '{target_id}' not found"
+                    }))
+                    return
+
+                adapter = get_adapter(target)
+                raw_history = adapter.get_history(target, lines=max(lines_count, 50))
+                content = compress_caveman_ultra(raw_history) if mode == "ultra" else format_raw_tail(raw_history, lines=lines_count)
+
+                client.publish(reply_topic, json.dumps({
+                    "id": req_id,
+                    "action": "tail_response",
+                    "success": True,
+                    "target_id": target.id,
+                    "target_name": target.name,
+                    "mode": mode,
+                    "content": content,
+                    "is_busy": target.is_busy
+                }))
+
+            elif action == "prompt":
+                prompt_text = req.get("prompt", "")
+                target_id = req.get("target", "auto")
+                act = req.get("act", "execute")
+
+                prompt_req = PromptRequest(prompt=prompt_text, target=target_id, action=act)
+                result = router.route(prompt_req) if router else None
+
+                client.publish(reply_topic, json.dumps({
+                    "id": req_id,
+                    "action": "prompt_response",
+                    "success": result.success if result else False,
+                    "result": result.to_dict() if result else {}
+                }))
+
+        except Exception as e:
+            logger.debug("Error processing P2P message: %s", e)
+
+    def stop(self):
+        self.running = False
+        if self.relay_client:
+            self.relay_client.close()

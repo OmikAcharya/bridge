@@ -39,17 +39,47 @@ class TestP2PAndQR(unittest.TestCase):
         self.assertTrue(p2p.verify_auth_token("secretkey_xyz"))
         self.assertFalse(p2p.verify_auth_token("wrong_key"))
 
-    def test_p2p_signaling_exchange(self):
-        p2p = P2PManager(room_id="room123", auth_key="key123")
-        p2p.post_signal("phone", {"type": "offer", "sdp": "v=0..."})
-        
-        host_signals = p2p.get_signals("host")
-        self.assertEqual(len(host_signals), 1)
-        self.assertEqual(host_signals[0]["sender"], "phone")
-        self.assertEqual(host_signals[0]["payload"]["type"], "offer")
+    def test_p2p_message_handling(self):
+        from bridge.discovery import SessionDiscovery
+        from bridge.targets import TargetManager
+        from bridge.adapters.factory import AdapterFactory
+        from bridge.router import PromptRouter
 
-        # Second poll should be empty
-        self.assertEqual(len(p2p.get_signals("host")), 0)
+        cfg = Config()
+        discovery = SessionDiscovery()
+        target_manager = TargetManager(discovery=discovery, config=cfg)
+        adapter_factory = AdapterFactory()
+        router = PromptRouter(target_manager=target_manager, adapter_factory=adapter_factory)
+
+        p2p = P2PManager(room_id="room123", auth_key="key123")
+
+        class MockClient:
+            def __init__(self):
+                self.published = []
+            def publish(self, topic, payload):
+                self.published.append((topic, json.loads(payload)))
+
+        mock_client = MockClient()
+
+        # 1. Test ping
+        p2p._handle_p2p_message(mock_client, "pb/room123/phone", json.dumps({
+            "id": 10, "action": "ping", "key": "key123"
+        }), router, target_manager)
+        self.assertEqual(len(mock_client.published), 1)
+        self.assertEqual(mock_client.published[0][1]["action"], "pong")
+
+        # 2. Test get_targets
+        p2p._handle_p2p_message(mock_client, "pb/room123/phone", json.dumps({
+            "id": 11, "action": "get_targets", "key": "key123"
+        }), router, target_manager)
+        self.assertEqual(len(mock_client.published), 2)
+        self.assertEqual(mock_client.published[1][1]["action"], "targets_response")
+
+        # 3. Test unauthorized key
+        p2p._handle_p2p_message(mock_client, "pb/room123/phone", json.dumps({
+            "id": 12, "action": "ping", "key": "wrong_key"
+        }), router, target_manager)
+        self.assertEqual(mock_client.published[2][1]["action"], "error")
 
 
 class TestP2PServerEndpoints(unittest.TestCase):
@@ -80,22 +110,6 @@ class TestP2PServerEndpoints(unittest.TestCase):
         self.assertTrue(data.get("success"))
         self.assertEqual(data.get("room"), "testroom")
         self.assertIn("stun:stun.l.google.com:19302", data.get("stun"))
-
-    def test_p2p_signal_and_poll(self):
-        # Post signal from phone with auth key
-        req = urllib.request.Request(
-            "http://127.0.0.1:8799/p2p/signal?room=testroom&sender=phone&key=testkey123",
-            data=json.dumps({"type": "offer", "sdp": "test_sdp"}).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
-        )
-        res = urllib.request.urlopen(req)
-        self.assertEqual(res.status, 200)
-
-        # Poll signals for host
-        poll_res = urllib.request.urlopen("http://127.0.0.1:8799/p2p/poll?room=testroom&target=host&key=testkey123")
-        poll_data = json.loads(poll_res.read().decode("utf-8"))
-        self.assertTrue(poll_data.get("success"))
-        self.assertEqual(len(poll_data.get("messages")), 1)
 
     def test_binding_default_and_exposed(self):
         cfg_default = Config()
