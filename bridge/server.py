@@ -689,9 +689,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     <!-- Quick Action Bar -->
     <div class="quick-actions-bar">
-        <button id="btnClearBar" class="action-chip" title="Clear text">
-            <span>Clear</span>
-        </button>
         <button id="btnEnterOnly" class="action-chip" title="Send Return">
             <span>Return ↵</span>
         </button>
@@ -705,7 +702,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <span>No</span>
         </button>
         <button id="btnInterrupt" class="action-chip danger" title="Send Ctrl+C">
-            <span>Stop (Ctrl+C)</span>
+            <span>Ctrl+C</span>
+        </button>
+        <button id="btnClearBar" class="action-chip" title="Clear text">
+            <span>Clear</span>
         </button>
     </div>
 
