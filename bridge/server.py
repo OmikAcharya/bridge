@@ -689,6 +689,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     <!-- Quick Action Bar -->
     <div class="quick-actions-bar">
+        <button id="btnClearBar" class="action-chip" title="Clear text">
+            <span>Clear</span>
+        </button>
         <button id="btnEnterOnly" class="action-chip" title="Send Return">
             <span>Return ↵</span>
         </button>
@@ -755,7 +758,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const historyList = document.getElementById('historyList');
         const historyBtn = document.getElementById('historyBtn');
         const closeHistoryModal = document.getElementById('closeHistoryModal');
-
+        const btnClearBar = document.getElementById('btnClearBar');
         const btnEnterOnly = document.getElementById('btnEnterOnly');
         const btnContinue = document.getElementById('btnContinue');
         const btnYes = document.getElementById('btnYes');
@@ -768,12 +771,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let promptHistory = JSON.parse(localStorage.getItem('bridge_prompt_history') || '[]');
         let lastSignature = '';
 
-        // Dynamic Viewport & Keyboard Resizing
+        // Dynamic Viewport & Purely Height-Driven Grid Collapse
+        let baseViewportHeight = window.innerHeight;
+
         function updateViewportHeight() {
-            const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-            document.documentElement.style.setProperty('--app-height', `${h}px`);
-            
-            if (document.activeElement === promptEl) {
+            const currentH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            document.documentElement.style.setProperty('--app-height', `${currentH}px`);
+
+            if (currentH > baseViewportHeight) {
+                baseViewportHeight = currentH;
+            }
+
+            // Grid collapses purely based on viewport height (e.g. keyboard presence or compact display)
+            const isHeightRestricted = (baseViewportHeight - currentH > 130) || (currentH < 500);
+
+            if (isHeightRestricted) {
                 document.body.classList.add('keyboard-active');
             } else {
                 document.body.classList.remove('keyboard-active');
@@ -785,20 +797,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             window.visualViewport.addEventListener('scroll', updateViewportHeight);
         }
         window.addEventListener('resize', updateViewportHeight);
-
-        promptEl.addEventListener('focus', () => {
-            document.body.classList.add('keyboard-active');
-            setTimeout(updateViewportHeight, 50);
-        });
-
-        promptEl.addEventListener('blur', () => {
-            setTimeout(() => {
-                if (document.activeElement !== promptEl) {
-                    document.body.classList.remove('keyboard-active');
-                    updateViewportHeight();
-                }
-            }, 100);
-        });
 
         if (localStorage.getItem('bridge_enter') === 'false') {
             enterToggle.checked = false;
@@ -1113,6 +1111,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             });
         }
 
+        function handleClearPrompt() {
+            if (!promptEl.value) return;
+            lastCleared = promptEl.value;
+            promptEl.value = '';
+            undoBtn.style.display = 'inline';
+            updateMetrics();
+            haptic(10);
+        }
+
+        attachInstantTap(btnClearBar, handleClearPrompt);
         attachInstantTap(sendBtn, () => executePrompt(null, null));
         attachInstantTap(btnEnterOnly, () => executePrompt('', 'raw_enter'));
         attachInstantTap(btnContinue, () => executePrompt('continue', 'execute'));
