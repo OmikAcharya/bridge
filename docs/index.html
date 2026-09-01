@@ -227,7 +227,7 @@
     <div id="cockpitBtnContinue" class="hidden"></div>
     <div id="refreshCockpitBtn" class="hidden"></div>
 
-<script>
+    <script>
         const promptEl = document.getElementById('prompt');
         const sendBtn = document.getElementById('sendBtn');
         const sendTitle = document.getElementById('sendTitle');
@@ -488,56 +488,191 @@
             return availableTargets.find(t => t.id === selectedTargetId) || null;
         }
 
-        
         function renderBentoGrid() {
             bentoGrid.innerHTML = '';
-            
-            // Auto target
-            const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') || availableTargets[0];
-            if (autoResolved) {
-                const autoRow = document.createElement('div');
-                autoRow.className = 'chat-row';
-                autoRow.innerHTML = `
-                    <div class="avatar">✨</div>
-                    <div class="chat-info">
-                        <div class="chat-name">Auto-detect</div>
-                        <div class="chat-preview">Routing to ${autoResolved.agent_name || autoResolved.name}</div>
-                    </div>
-                    <div class="chevron">›</div>
-                `;
-                autoRow.addEventListener('click', () => {
-                    selectTarget('auto');
-                    document.getElementById('chatView').classList.add('active');
-                    startTail();
-                });
-                bentoGrid.appendChild(autoRow);
-            }
 
+            // Auto-detect row
+            const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') || availableTargets[0];
+            const autoRow = document.createElement('div');
+            autoRow.className = 'chat-row';
+            const resolvedName = autoResolved ? (autoResolved.agent_name || autoResolved.name) : 'Searching...';
+            autoRow.innerHTML = `
+                <div class="avatar">✨</div>
+                <div class="chat-info">
+                    <div class="chat-name">Auto-detect</div>
+                    <div class="chat-preview">Routing to ${resolvedName}</div>
+                </div>
+                <div class="chevron">›</div>
+            `;
+            autoRow.addEventListener('click', () => {
+                selectTarget('auto');
+                document.getElementById('chatView').classList.add('active');
+            });
+            bentoGrid.appendChild(autoRow);
+
+            // Session rows
             availableTargets.forEach(t => {
                 const row = document.createElement('div');
                 row.className = 'chat-row';
                 const isBusy = (t.status === 'busy' || t.is_busy);
-                const dot = isBusy ? `<div class="status-dot"></div>` : '';
+                const dot = isBusy ? '<div class="status-dot"></div>' : '';
                 const compactPath = (t.metadata && t.metadata.compact_cwd) || t.folder || '~';
                 const shortName = t.agent_name || t.name;
-                
+
                 row.innerHTML = `
                     <div class="avatar">💻${dot}</div>
                     <div class="chat-info">
                         <div class="chat-name">${t.id === 'focused' ? 'Focused App' : shortName}</div>
-                        <div class="chat-preview">${t.id === 'focused' ? (t.metadata?.window_title || 'Active Window') : compactPath}</div>
+                        <div class="chat-preview">${t.id === 'focused' ? (t.metadata && t.metadata.window_title || 'Active Window') : compactPath}</div>
                     </div>
                     <div class="chevron">›</div>
                 `;
                 row.addEventListener('click', () => {
                     selectTarget(t.id);
                     document.getElementById('chatView').classList.add('active');
-                    startTail();
                 });
                 bentoGrid.appendChild(row);
             });
+
+            updateSendButtonLabel();
         }
-async function executePrompt(customText = null, action = null) {
+
+        function updateSendButtonLabel() {
+            const resolved = getResolvedTarget();
+            const willEnter = enterToggle.checked;
+
+            if (selectedTargetId === 'focused') {
+                sendTitle.textContent = willEnter ? 'Paste & Enter on Mac' : 'Paste to Focused Window';
+                sendSubtitle.textContent = 'Active application on Mac';
+                miniTargetName.textContent = 'Focused App';
+                miniTargetPath.textContent = 'Active Window';
+                return;
+            }
+
+            if (resolved) {
+            if (resolved) {
+                let targetDisplay = resolved.name;
+                if (selectedTargetId === 'auto') {
+                    targetDisplay = `${resolved.agent_name || resolved.name}`;
+                }
+                sendTitle.textContent = 'Send Prompt';
+                sendSubtitle.textContent = `Route to ${targetDisplay}`;
+                miniTargetName.textContent = targetDisplay;
+                miniTargetPath.textContent = resolved.cwd || resolved.tty || '--';
+            } else {
+                sendTitle.textContent = 'Send Prompt';
+                sendSubtitle.textContent = 'No terminal target';
+                miniTargetName.textContent = 'Offline';
+                miniTargetPath.textContent = '--';
+            }
+        }
+
+        function updateActivityHeaderOptimistic() {
+            const resolved = getResolvedTarget();
+            if (resolved) {
+                const name = (selectedTargetId === 'auto' ? (resolved.agent_name || resolved.name) : resolved.name) || 'Live Log';
+                if (headerAgentName) headerAgentName.textContent = name;
+                if (cockpitTargetTitle) cockpitTargetTitle.textContent = name;
+                const isBusy = (resolved.status === 'busy' || resolved.is_busy);
+                if (isBusy) {
+                    headerAgentDot.classList.add('busy');
+                    cockpitAgentDot.classList.add('busy');
+                    if (headerAgentStatus) headerAgentStatus.textContent = 'Busy ↗';
+                } else {
+                    headerAgentDot.classList.remove('busy');
+                    cockpitAgentDot.classList.remove('busy');
+                    if (headerAgentStatus) headerAgentStatus.textContent = 'Live Log ↗';
+                }
+            }
+        }
+
+        function selectTarget(targetId) {
+            selectedTargetId = targetId;
+            localStorage.setItem('bridge_target_id', selectedTargetId);
+            haptic(15);
+            renderBentoGrid();
+            updateActivityHeaderOptimistic();
+            fetchActivityTail();
+        }
+
+        function openHistorySheet() {
+            historyList.innerHTML = '';
+            if (promptHistory.length === 0) {
+                historyList.innerHTML = `<div style="color:var(--text-dim); text-align:center; padding: 20px; font-family:var(--font-mono); font-size:12px;">No recent prompts</div>`;
+            } else {
+                promptHistory.forEach(text => {
+                    const card = document.createElement('div');
+                    card.className = 'history-card';
+                    card.textContent = text;
+                    card.addEventListener('click', () => {
+                        promptEl.value = text;
+                        updateMetrics();
+                        closeModal(historyModal);
+                        promptEl.focus();
+                        haptic(12);
+                    });
+                    historyList.appendChild(card);
+                });
+            }
+            openModal(historyModal);
+        }
+
+        function openModal(el) {
+            el.classList.add('open');
+            haptic(10);
+        }
+
+        function closeModal(el) {
+            el.classList.remove('open');
+        }
+
+        historyBtn.addEventListener('click', openHistorySheet);
+        closeHistoryModal.addEventListener('click', () => closeModal(historyModal));
+        historyModal.addEventListener('click', (e) => { if (e.target === historyModal) closeModal(historyModal); });
+
+        async function fetchTargets(force = false) {
+            try {
+                let data = null;
+                if (isP2P) {
+                    data = await p2pRequest('get_targets');
+                } else {
+                    const res = await fetch('/targets', { cache: 'no-store' });
+                    if (!res.ok) throw new Error();
+                    data = await res.json();
+                }
+                availableTargets = data.targets || [];
+
+                const newSignature = JSON.stringify(availableTargets.map(t => [
+                    t.id, t.name, t.status, t.is_busy, t.cwd, t.cmd, t.tty
+                ]));
+
+                if (!force && newSignature === lastSignature) {
+                    updateSendButtonLabel();
+                    updateActivityHeaderOptimistic();
+                    return;
+                }
+
+                lastSignature = newSignature;
+                renderBentoGrid();
+                updateActivityHeaderOptimistic();
+            } catch (e) {
+                // Keep UI stable if offline
+            }
+        }
+
+        refreshBtn.addEventListener('click', async () => {
+            haptic(10);
+            refreshBtn.style.transform = 'rotate(180deg)';
+            refreshBtn.style.transition = 'transform 0.3s ease';
+            await fetchTargets(true);
+            setTimeout(() => {
+                refreshBtn.style.transform = 'none';
+                refreshBtn.style.transition = 'none';
+            }, 300);
+        });
+
+        // Core Send function
+        async function executePrompt(customText = null, action = null) {
             const text = (customText !== null) ? customText : promptEl.value.trim();
             if (!text && action === null) {
                 promptEl.focus();
@@ -547,16 +682,6 @@ async function executePrompt(customText = null, action = null) {
             haptic(20);
             const initialTitle = sendTitle.textContent;
             const initialSubtitle = sendSubtitle.textContent;
-
-            
-            if (resolvedAction !== 'interrupt') {
-                const scrollArea = document.getElementById('chatScroll');
-                const userRow = document.createElement('div');
-                userRow.className = 'bubble-row user-row';
-                userRow.innerHTML = `<div class="bubble user">${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`;
-                scrollArea.insertBefore(userRow, scrollArea.lastElementChild);
-                setTimeout(() => scrollArea.scrollTop = scrollArea.scrollHeight, 50);
-            }
 
             sendBtn.disabled = true;
             sendTitle.textContent = 'Sending...';
@@ -1055,9 +1180,6 @@ async function executePrompt(customText = null, action = null) {
 
         // Initialize
         updateViewportHeight();
-        if (isP2P && p2pRoom && p2pKey) {
-            initP2PRelay(p2pRoom, p2pKey);
-        }
         ping();
         fetchTargets(true);
         fetchActivityTail();
@@ -1067,3 +1189,4 @@ async function executePrompt(customText = null, action = null) {
         updateMetrics();
     </script>
 </html>
+
