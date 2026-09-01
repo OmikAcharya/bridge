@@ -29,8 +29,17 @@ class LegacyPasteAdapter(TerminalAdapter):
                 error="Prompt text is empty."
             )
 
+        # 1. Preserve current clipboard content
+        prev_clipboard = None
         try:
-            # 1. Put prompt into macOS clipboard
+            p = subprocess.run(["pbpaste"], capture_output=True, timeout=1.0)
+            if p.returncode == 0:
+                prev_clipboard = p.stdout
+        except Exception:
+            pass
+
+        try:
+            # 2. Put prompt into macOS clipboard
             subprocess.run(
                 ["pbcopy"],
                 input=text.encode("utf-8"),
@@ -38,7 +47,7 @@ class LegacyPasteAdapter(TerminalAdapter):
                 timeout=2.0
             )
 
-            # 2. Paste into active application via AppleScript keystrokes
+            # 3. Paste into active application via AppleScript keystrokes
             if action in ("paste_and_enter", "execute"):
                 applescript = (
                     'tell application "System Events"\n'
@@ -81,3 +90,14 @@ class LegacyPasteAdapter(TerminalAdapter):
                 adapter_used=self.name,
                 error=f"Legacy paste failed: {str(e)}"
             )
+        finally:
+            if prev_clipboard is not None:
+                def _restore(data):
+                    import time
+                    time.sleep(0.35)
+                    try:
+                        subprocess.run(["pbcopy"], input=data, timeout=1.0)
+                    except Exception:
+                        pass
+                import threading
+                threading.Thread(target=_restore, args=(prev_clipboard,), daemon=True).start()

@@ -6,7 +6,7 @@ Delivers input directly to a specific iTerm2 session or TTY without stealing GUI
 import subprocess
 from bridge.adapters.base import TerminalAdapter
 from bridge.models import Target, DeliveryResult
-from bridge.adapters.terminal import escape_for_applescript
+from bridge.adapters.terminal import escape_for_applescript, sanitize_tty
 
 
 class ITermAdapter(TerminalAdapter):
@@ -29,7 +29,7 @@ class ITermAdapter(TerminalAdapter):
                 error="Prompt text is empty."
             )
 
-        tty = target.tty
+        tty = sanitize_tty(target.tty)
         escaped_text = escape_for_applescript(text)
         newline_bool = "false" if action in ("paste", "no_enter") else "true"
 
@@ -112,7 +112,7 @@ class ITermAdapter(TerminalAdapter):
 
     def get_history(self, target: Target, lines: int = 50) -> str:
         """Retrieves recent terminal output history from the iTerm2 session."""
-        tty = target.tty
+        tty = sanitize_tty(target.tty)
         script = f'''
         tell application "iTerm"
             set foundSession to missing value
