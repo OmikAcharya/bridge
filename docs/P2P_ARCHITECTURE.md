@@ -1,74 +1,103 @@
-# Architecture Ideation: Peer-to-Peer (P2P) Zero-Exposure Remote Bridge
+# Architecture Specification: Peer-to-Peer (P2P) Zero-Exposure Remote Bridge
 
 ## Problem Statement
-On public or untrusted networks (coffee shops, airports, cellular 5G, hotels):
-1. **Security Risk**: Exposing an open listening port (`0.0.0.0:8765`) over unencrypted HTTP exposes the machine to local port scanners, packet sniffing, and prompt injection.
-2. **NAT / AP Isolation**: Public Wi-Fi networks frequently enable Access Point (AP) isolation (preventing devices on the same Wi-Fi from talking to each other) and carrier-grade NAT on cellular (5G/LTE), preventing direct IP connections.
+
+When connecting mobile devices to local development machines over untrusted networks (public Wi-Fi, coffee shops, airports, cellular 5G):
+1. **Network Exposure Risk**: Binding an unencrypted HTTP or SSH server to local network interfaces (`0.0.0.0`) exposes listening ports to local port scanning, packet sniffing, and untrusted network traffic.
+2. **Access Point (AP) Isolation & NAT**: Public Wi-Fi networks frequently enable AP isolation (preventing devices on the same subnet from routing packets to each other), and cellular carrier networks enforce Carrier-Grade NAT (CGNAT), blocking direct inbound TCP connections.
 
 ---
 
-## Proposed P2P & Zero-Exposure Architectures
+## Architecture: Zero-Exposure End-to-End Encrypted Relay
 
-### Option 1: True P2P WebRTC DataChannel (Browser-to-Terminal)
-- **Concept**: Mac binds only to `127.0.0.1` (localhost). A direct, end-to-end encrypted WebRTC DataChannel is established between Mobile Browser and Mac Terminal.
-- **Workflow**:
-  1. Bridge CLI boots on Mac, generates an ephemeral session key and SDP offer.
-  2. CLI renders an ASCII QR code in the terminal.
-  3. Phone scans QR code via camera (opening the web client with session secret in URL `#hash`).
-  4. Public STUN (`stun.l.google.com:19302`) punches NAT and establishes direct DTLS-SRTP data channel.
-- **Pros**:
-  - **Zero open ports** on LAN or internet.
-  - End-to-end encrypted (DTLS).
-  - Works across 5G cellular, Wi-Fi with AP isolation, and firewalls.
-  - Lowest possible latency (<15ms direct peer socket).
-- **Cons**: Requires WebRTC signaling exchange (can use ephemeral QR code or minimal Cloudflare Worker).
+`bridge` implements an outbound zero-knowledge relay architecture combining standard library socket transport with native browser WebCrypto:
 
----
-
-### Option 2: Outbound E2EE Cloudflare Worker Relay (Zero-Knowledge)
-- **Concept**: Both Mac and Mobile connect *outbound* via WebSockets to a lightweight, free Cloudflare Worker.
-- **Workflow**:
-  1. Mac server makes outbound WSS connection to relay: `wss://bridge.your-domain.workers.dev/channel/<channel-id>`.
-  2. Phone opens the web app and connects to the same channel.
-  3. All prompt payloads and terminal logs are encrypted client-side using `AES-GCM-256` or `X25519` with a shared key that never touches the relay (stored only in URL hash fragment `#key=...`).
-- **Pros**:
-  - **No inbound ports**: Mac firewall blocks all incoming connections.
-  - **Zero-knowledge**: Cloudflare Worker sees only encrypted binary ciphertext.
-  - 100% reliable across any cellular carrier or corporate proxy.
-  - Ultra-simple: ~50 lines of Python on Mac, ~40 lines of JS in client.
-- **Cons**: Relies on a free Cloudflare Worker or WebSocket relay.
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                              Mobile Client                             │
+│       (Browser Native WebCrypto + WebSocket MQTT Client NanoMQTTWS)    │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+                                    │ Encrypted Payload {nonce, ct, tag}
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Public Relay Broker (WSS)                       │
+│                  (broker.emqx.io / broker.hivemq.com)                  │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+                                    │ Outbound Socket Connection (TCP 1883)
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                       macOS Host Daemon (main.py)                      │
+│                  (Pure Python Stdlib MiniMQTTClient)                   │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+                                    │ Background PTY Injection
+                                    ▼
+                        Target Terminal Session
+```
 
 ---
 
-### Option 3: Tailscale / WireGuard Private Mesh (Platform Native - Ponytail Rung 4)
-- **Concept**: Use user's authenticated WireGuard overlay network (Tailscale MagicDNS).
-- **Workflow**:
-  1. Bridge binds to Mac's Tailscale interface (`100.x.y.z`) or runs `tailscale serve --bg 8765`.
-  2. Mobile device accesses `https://macbook.tailnet.ts.net`.
-- **Pros**:
-  - **Zero custom code**: Native OS platform feature.
-  - Automatic WireGuard encryption and device-level ACL authentication.
-  - Invisible on local public Wi-Fi (no LAN IP exposed).
-- **Cons**: Requires Tailscale app installed on both Mac and phone.
+## Cryptographic Protocol Specification
+
+### 1. Key Derivation & Ephemeral Rooms
+- On startup, the host generates:
+  - `room_id`: 12-character random hex string (`secrets.token_hex(6)`).
+  - `auth_key`: 24-character URL-safe random string (`secrets.token_urlsafe(18)`).
+- The key is communicated to the mobile client exclusively through the URL hash fragment:
+  `https://omikacharya.github.io/bridge/#p2p=1&room=<room_id>&key=<auth_key>`
+- RFC 3986 specifies that URL fragments are processed strictly client-side by the user agent and are never transmitted over HTTP request lines or server access logs.
+
+### 2. Subkey Derivation
+From the master key $K_{\text{master}}$, separate keys are derived for encryption and authentication:
+- $K_{\text{digest}} = \text{SHA-256}(K_{\text{master}})$
+- $K_{\text{enc}} = \text{HMAC-SHA256}(K_{\text{digest}}, \text{"enc"})$
+- $K_{\text{mac}} = \text{HMAC-SHA256}(K_{\text{digest}}, \text{"mac"})$
+
+### 3. Encryption (CTR Stream Cipher)
+- For message plaintext $P$:
+  - A 16-byte cryptographically secure random nonce $N$ is generated.
+  - Keystream blocks are computed: $B_i = \text{HMAC-SHA256}(K_{\text{enc}}, N \mathbin{\Vert} \text{counter}_{32}(i))$ for $i \in [0, \lceil |P| / 32 \rceil - 1]$.
+  - Ciphertext $C = P \oplus \text{truncate}(B_0 \mathbin{\Vert} B_1 \mathbin{\Vert} \dots, |P|)$.
+
+### 4. Authentication (Encrypt-then-MAC)
+- The authentication tag is computed over the concatenated nonce and ciphertext:
+  $T = \text{HMAC-SHA256}(K_{\text{mac}}, N \mathbin{\Vert} C)$
+- The resulting transport envelope is formatted as JSON:
+  `{"nonce": "<hex>", "ct": "<hex>", "tag": "<hex>"}`
+
+### 5. Decryption & Tamper Verification
+- Upon receipt of an envelope $\{N, C, T\}$:
+  1. Compute expected tag $T' = \text{HMAC-SHA256}(K_{\text{mac}}, N \mathbin{\Vert} C)$.
+  2. Verify $T' == T$ using constant-time comparison (`secrets.compare_digest`).
+  3. If verification fails, the payload is immediately dropped with zero execution or feedback.
+  4. If verification passes, keystream is regenerated and ciphertext is XOR-decrypted to recover $P$.
 
 ---
 
-## Comparison Matrix
+## Transport Layer Mechanics
 
-| Dimension | Option 1: WebRTC P2P | Option 2: E2EE Worker Relay | Option 3: Tailscale Mesh |
-| :--- | :--- | :--- | :--- |
-| **Inbound Port Open on Mac** | None (Localhost only) | None (Outbound WSS only) | Tailnet overlay only |
-| **End-to-End Encryption** | DTLS-SRTP | AES-256-GCM | WireGuard (ChaCha20) |
-| **Works on Cellular 5G** | Yes (via STUN/TURN) | Yes (100% reliable) | Yes |
-| **Setup Friction** | Scan QR code | Scan QR code / Open Link | Install Tailscale App |
-| **External Dependencies** | WebRTC signaling | Cloudflare Worker (Free) | Tailscale daemon |
-| **Code Complexity** | Moderate | Very Low (~90 LOC total) | Zero LOC (Config only) |
+### Host Implementation (`bridge/p2p.py`)
+- Uses Python standard library `socket`, `struct`, and `threading`.
+- Implements `MiniMQTTClient`, a minimal MQTT v3.1.1 framing client (~100 LOC).
+- Connects outbound to TCP port 1883 on `broker.emqx.io` (with automatic failover to `broker.hivemq.com`).
+- Subscribes to `pb/<room_id>/mac` and publishes responses to `pb/<room_id>/phone`.
+
+### Client Implementation (`bridge/server.py`, `docs/index.html`)
+- Uses browser native `WebSocket` over TLS (`wss://broker.emqx.io:8084/mqtt`).
+- Implements `NanoMQTTWS`, a lightweight binary MQTT client (~50 LOC).
+- Subscribes to `pb/<room_id>/phone` and publishes requests to `pb/<room_id>/mac`.
 
 ---
 
-## Recommended Roadmap
+## Security Guarantees
 
-1. **Phase 1 (Instant / Zero Code)**: Support Tailscale IP & MagicDNS auto-detection in Prompt Bridge when available.
-2. **Phase 2 (True Zero-Exposure / Zero-Friction)**: Build **Option 2 (E2EE Outbound Relay)** or **Option 1 (WebRTC DataChannel)**:
-   - Mac terminal renders an ASCII QR code on launch.
-   - Scanning the QR code with phone camera immediately opens the prompt client securely over any network without exposing local ports.
+| Property | Implementation Mechanism |
+| :--- | :--- |
+| **Zero Inbound Attack Surface** | Daemon binds exclusively to `127.0.0.1:8765`. Both host and mobile make outbound-only connections. |
+| **Confidentiality** | CTR mode stream encryption with distinct per-message 128-bit nonces. |
+| **Integrity & Authenticity** | HMAC-SHA256 Encrypt-then-MAC verification on every frame. |
+| **Replay Protection** | Ephemeral room identifiers and keys regenerated on every host process launch. |
+| **Zero Third-Party Trust** | Intermediate MQTT brokers route opaque ciphertext envelopes and possess no knowledge of plaintext or keys. |
+
