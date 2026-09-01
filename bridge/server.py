@@ -1241,6 +1241,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         // Initialize
         updateViewportHeight();
+        if (isP2P && p2pRoom && p2pKey) {
+            initP2PRelay(p2pRoom, p2pKey);
+        }
         ping();
         fetchTargets(true);
         fetchActivityTail();
