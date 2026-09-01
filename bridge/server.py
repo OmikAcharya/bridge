@@ -2152,26 +2152,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 const macInput = new Uint8Array(nonce.length + ct.length);
                 macInput.set(nonce, 0);
                 macInput.set(ct, nonce.length);
-                const tagBytes = await crypto.subtle.sign('HMAC', this.kMac, macInput);
-
-                const tagHex = Array.from(new Uint8Array(tagBytes)).map(b => b.toString(16).padStart(2, '0')).join('');
-                const nonceHex = Array.from(nonce).map(b => b.toString(16).padStart(2, '0')).join('');
-                const ctHex = Array.from(ct).map(b => b.toString(16).padStart(2, '0')).join('');
-
-                return { nonce: nonceHex, ct: ctHex, tag: tagHex };
+                const toHex = arr => Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+                return { nonce: toHex(nonce), ct: toHex(ct), tag: toHex(new Uint8Array(tagBytes)) };
             }
 
             async decrypt(envelope) {
                 await this.readyPromise;
                 const dec = new TextDecoder();
-                const nonce = new Uint8Array(envelope.nonce.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-                const ct = new Uint8Array(envelope.ct.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                const nonce = Uint8Array.from(envelope.nonce.match(/../g), b => parseInt(b, 16));
+                const ct = Uint8Array.from(envelope.ct.match(/../g), b => parseInt(b, 16));
 
                 const macInput = new Uint8Array(nonce.length + ct.length);
                 macInput.set(nonce, 0);
                 macInput.set(ct, nonce.length);
                 const tagBytes = await crypto.subtle.sign('HMAC', this.kMac, macInput);
-                const expectedTag = Array.from(new Uint8Array(tagBytes)).map(b => b.toString(16).padStart(2, '0')).join('');
+                const toHex = arr => Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+                const expectedTag = toHex(new Uint8Array(tagBytes));
 
                 if (expectedTag !== envelope.tag) {
                     throw new Error('MAC verification failed - message tampered');

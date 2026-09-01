@@ -47,19 +47,13 @@ class P2PCrypto:
         """Encrypts plaintext string into an authenticated {nonce, ct, tag} envelope."""
         data = plaintext.encode("utf-8")
         nonce = secrets.token_bytes(16)
-        num_blocks = (len(data) + 31) // 32
-        blocks = [
+        keystream = b"".join(
             hmac.new(self.k_enc, nonce + struct.pack(">I", i), hashlib.sha256).digest()
-            for i in range(num_blocks)
-        ]
-        keystream = b"".join(blocks)[:len(data)]
+            for i in range((len(data) + 31) // 32)
+        )[:len(data)]
         ciphertext = bytes(b ^ k for b, k in zip(data, keystream))
         tag = hmac.new(self.k_mac, nonce + ciphertext, hashlib.sha256).hexdigest()
-        return {
-            "nonce": nonce.hex(),
-            "ct": ciphertext.hex(),
-            "tag": tag
-        }
+        return {"nonce": nonce.hex(), "ct": ciphertext.hex(), "tag": tag}
 
     def decrypt(self, envelope: dict) -> str:
         """Verifies MAC and decrypts ciphertext envelope into plaintext string."""
@@ -74,14 +68,11 @@ class P2PCrypto:
         if not secrets.compare_digest(tag, expected_tag):
             raise ValueError("MAC verification failed - message tampered or wrong key")
 
-        num_blocks = (len(ciphertext) + 31) // 32
-        blocks = [
+        keystream = b"".join(
             hmac.new(self.k_enc, nonce + struct.pack(">I", i), hashlib.sha256).digest()
-            for i in range(num_blocks)
-        ]
-        keystream = b"".join(blocks)[:len(ciphertext)]
-        plaintext = bytes(b ^ k for b, k in zip(ciphertext, keystream))
-        return plaintext.decode("utf-8")
+            for i in range((len(ciphertext) + 31) // 32)
+        )[:len(ciphertext)]
+        return bytes(b ^ k for b, k in zip(ciphertext, keystream)).decode("utf-8")
 
 
 class MiniMQTTClient:
@@ -222,11 +213,6 @@ class P2PManager:
     def generate_lan_url(self, lan_ip: str, port: int) -> str:
         """Constructs direct local LAN URL when --expose-lan is explicitly enabled."""
         return f"http://{lan_ip}:{port}"
-
-    def generate_pairing_url(self, base_url: str) -> str:
-        """Legacy helper for backwards compatibility."""
-        clean_base = base_url.rstrip("/")
-        return f"{clean_base}/#p2p=1&room={self.room_id}&key={self.auth_key}"
 
     def get_pairing_banner(self, lan_ip: str = "127.0.0.1", port: int = 8765, is_lan_exposed: bool = False, mdns_host: str = "") -> str:
         """Generates terminal ASCII QR code and pairing instructions for the active mode."""
