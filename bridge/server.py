@@ -153,21 +153,40 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         .conn-badge {
             font-family: var(--font-mono);
-            font-size: 9px;
+            font-size: 9.5px;
             font-weight: 600;
-            border-radius: 4px;
-            padding: 1px 5px;
+            border-radius: 12px;
+            padding: 2px 7px;
             letter-spacing: 0.02em;
             display: inline-flex;
             align-items: center;
-            gap: 3px;
-            transition: all 0.2s ease;
+            gap: 4px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .conn-badge:active {
+            transform: scale(0.93);
+        }
+
+        .conn-badge .badge-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: currentColor;
+            display: inline-block;
         }
 
         .conn-badge.p2p {
             color: var(--green);
             background: rgba(34, 197, 94, 0.12);
             border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .conn-badge.p2p:hover {
+            background: rgba(34, 197, 94, 0.2);
+            border-color: rgba(34, 197, 94, 0.45);
         }
 
         .conn-badge.lan {
@@ -180,6 +199,119 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             color: var(--blue);
             background: rgba(59, 130, 246, 0.12);
             border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        /* Connection Details Modal */
+        .conn-modal-body {
+            padding: 14px 0 6px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .conn-status-banner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 12px;
+            padding: 12px 14px;
+        }
+
+        .conn-status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 10px var(--green-glow);
+            flex-shrink: 0;
+        }
+
+        .conn-status-dot.offline {
+            background: var(--red);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+        }
+
+        .conn-status-title {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .conn-status-sub {
+            font-size: 11.5px;
+            color: var(--text-muted);
+            margin-top: 1px;
+        }
+
+        .conn-details-list {
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 12px;
+            padding: 4px 12px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .conn-detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 9px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: 12.5px;
+        }
+
+        .conn-detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .conn-detail-label {
+            color: var(--text-muted);
+        }
+
+        .conn-detail-value {
+            color: var(--text-main);
+            font-weight: 500;
+        }
+
+        .conn-detail-value.mono {
+            font-family: var(--font-mono);
+            font-size: 11.5px;
+        }
+
+        .conn-modal-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .action-btn-secondary, .action-btn-primary {
+            flex: 1;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: transform 0.1s ease, opacity 0.15s ease;
+        }
+
+        .action-btn-secondary {
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            color: var(--text-main);
+        }
+
+        .action-btn-primary {
+            background: var(--accent);
+            border: none;
+            color: var(--accent-text);
+        }
+
+        .action-btn-secondary:active, .action-btn-primary:active {
+            transform: scale(0.96);
         }
 
         .header-actions {
@@ -1198,6 +1330,47 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- Connection & Security Details Bottom Sheet -->
+    <div id="connModal" class="modal-overlay">
+        <div class="bottom-sheet">
+            <div class="sheet-header">
+                <span class="sheet-title">Connection & Security</span>
+                <button id="closeConnModal" class="sheet-close">✕</button>
+            </div>
+            <div class="conn-modal-body">
+                <div class="conn-status-banner">
+                    <div class="conn-status-dot" id="modalConnDot"></div>
+                    <div class="conn-status-info">
+                        <div class="conn-status-title" id="modalConnTitle">P2P Encrypted Tunnel</div>
+                        <div class="conn-status-sub" id="modalConnSub">Direct End-to-End Encrypted Relay</div>
+                    </div>
+                </div>
+                <div class="conn-details-list">
+                    <div class="conn-detail-row">
+                        <span class="conn-detail-label">Security</span>
+                        <span class="conn-detail-value">CTR-HMAC-SHA256 (E2EE)</span>
+                    </div>
+                    <div class="conn-detail-row">
+                        <span class="conn-detail-label">Relay Broker</span>
+                        <span class="conn-detail-value" id="modalRelayName">broker.emqx.io</span>
+                    </div>
+                    <div class="conn-detail-row" id="modalRoomRow">
+                        <span class="conn-detail-label">Room ID</span>
+                        <span class="conn-detail-value mono" id="modalRoomId">--</span>
+                    </div>
+                    <div class="conn-detail-row">
+                        <span class="conn-detail-label">Relay Latency</span>
+                        <span class="conn-detail-value mono" id="modalPingVal">--</span>
+                    </div>
+                </div>
+                <div class="conn-modal-actions">
+                    <button id="modalPingBtn" class="action-btn-secondary">Test Latency</button>
+                    <button id="modalCopyBtn" class="action-btn-primary">Copy Link</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const promptEl = document.getElementById('prompt');
         const sendBtn = document.getElementById('sendBtn');
@@ -1218,6 +1391,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const historyList = document.getElementById('historyList');
         const historyBtn = document.getElementById('historyBtn');
         const closeHistoryModal = document.getElementById('closeHistoryModal');
+
+        const connModal = document.getElementById('connModal');
+        const closeConnModal = document.getElementById('closeConnModal');
+        const modalConnDot = document.getElementById('modalConnDot');
+        const modalConnTitle = document.getElementById('modalConnTitle');
+        const modalConnSub = document.getElementById('modalConnSub');
+        const modalRoomId = document.getElementById('modalRoomId');
+        const modalPingVal = document.getElementById('modalPingVal');
+        const modalPingBtn = document.getElementById('modalPingBtn');
+        const modalCopyBtn = document.getElementById('modalCopyBtn');
+
         const btnEnterOnly = document.getElementById('btnEnterOnly');
         const btnContinue = document.getElementById('btnContinue');
         const btnYes = document.getElementById('btnYes');
@@ -1252,6 +1436,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let selectedTargetId = localStorage.getItem('bridge_target_id') || 'auto';
         let promptHistory = JSON.parse(localStorage.getItem('bridge_prompt_history') || '[]');
         let lastSignature = '';
+        let lastPromptText = '';
+        let lastPingMs = null;
 
         let isCavemanUltra = localStorage.getItem('bridge_caveman_output') !== 'false';
         updateModeUI();
@@ -1324,15 +1510,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             try {
                 const targetId = selectedTargetId;
                 const mode = isCavemanUltra ? 'ultra' : 'raw';
-                const res = await fetch(`/terminal/tail?target=${encodeURIComponent(targetId)}&mode=${mode}&lines=40`, {
-                    cache: 'no-store',
-                    signal: activityAbortController.signal
-                });
-                if (!res.ok) return;
-                const data = await res.json();
+                let data = null;
+
+                if (isP2P) {
+                    if (!isP2PReady) return;
+                    data = await p2pRequest('get_tail', { target: targetId, mode: mode, lines: 40 });
+                } else {
+                    const res = await fetch(`/terminal/tail?target=${encodeURIComponent(targetId)}&mode=${mode}&lines=40`, {
+                        cache: 'no-store',
+                        signal: activityAbortController.signal
+                    });
+                    if (!res.ok) return;
+                    data = await res.json();
+                }
+
                 if (targetId !== selectedTargetId) return;
 
-                if (data.success && data.content) {
+                if (data && data.success && data.content) {
                     cockpitActivityContent.textContent = data.content;
                     if (data.is_busy) {
                         headerAgentDot.classList.add('busy');
@@ -1828,22 +2022,86 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             if (!connBadge) return;
             const host = window.location.hostname;
             if (isP2PReady || state === 'p2p') {
-                connBadge.textContent = '🔒 P2P E2EE';
+                connBadge.innerHTML = '<span class="badge-dot"></span> P2P E2EE';
                 connBadge.className = 'conn-badge p2p';
-                connBadge.title = 'Direct End-to-End Encrypted Relay';
+                connBadge.title = 'Tap for Connection & Security Details';
             } else if (isP2P) {
-                connBadge.textContent = '🔒 P2P (Connecting...)';
+                connBadge.innerHTML = '<span class="badge-dot"></span> P2P (Connecting...)';
                 connBadge.className = 'conn-badge p2p';
                 connBadge.title = 'Connecting to P2P relay...';
             } else if (host === 'localhost' || host === '127.0.0.1') {
-                connBadge.textContent = '💻 Localhost';
+                connBadge.innerHTML = '<span class="badge-dot"></span> Localhost';
                 connBadge.className = 'conn-badge local';
                 connBadge.title = 'Connected locally on Mac';
             } else {
-                connBadge.textContent = '🌐 LAN Direct';
+                connBadge.innerHTML = '<span class="badge-dot"></span> LAN Direct';
                 connBadge.className = 'conn-badge lan';
                 connBadge.title = 'Connected over Exposed LAN IP';
             }
+        }
+
+        function openConnDetailsModal() {
+            if (!connModal) return;
+            haptic(15);
+            if (isP2P) {
+                modalConnDot.className = isP2PReady ? 'conn-status-dot' : 'conn-status-dot offline';
+                modalConnTitle.textContent = isP2PReady ? 'P2P Encrypted Tunnel Active' : 'Connecting to P2P Relay...';
+                modalConnSub.textContent = isP2PReady ? 'Zero-Knowledge CTR-HMAC-SHA256 authenticated tunnel' : 'Attempting to establish relay connection...';
+                modalRoomId.textContent = p2pRoom || '--';
+                modalPingVal.textContent = lastPingMs !== null ? `${lastPingMs} ms` : 'Active';
+            } else {
+                const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                modalConnDot.className = 'conn-status-dot';
+                modalConnTitle.textContent = isLocal ? 'Localhost Connection' : 'LAN Direct Connection';
+                modalConnSub.textContent = isLocal ? 'Direct loopback connection on Mac' : 'Direct connection over local Wi-Fi';
+                modalRoomId.textContent = 'None (Direct)';
+                modalPingVal.textContent = '< 1 ms (Local)';
+            }
+            connModal.classList.add('open');
+        }
+
+        if (connBadge) {
+            connBadge.addEventListener('click', openConnDetailsModal);
+        }
+        if (closeConnModal) {
+            closeConnModal.addEventListener('click', () => {
+                haptic(10);
+                connModal.classList.remove('open');
+            });
+        }
+        if (modalPingBtn) {
+            modalPingBtn.addEventListener('click', async () => {
+                haptic(15);
+                modalPingBtn.textContent = 'Pinging...';
+                modalPingVal.textContent = 'Measuring...';
+                const t0 = performance.now();
+                try {
+                    if (isP2P && isP2PReady) {
+                        await p2pRequest('ping');
+                        lastPingMs = Math.round(performance.now() - t0);
+                        modalPingVal.textContent = `${lastPingMs} ms`;
+                    } else {
+                        const res = await fetch('/ping', { cache: 'no-store' });
+                        if (res.ok) {
+                            lastPingMs = Math.round(performance.now() - t0);
+                            modalPingVal.textContent = `${lastPingMs} ms`;
+                        }
+                    }
+                } catch (e) {
+                    modalPingVal.textContent = 'Timeout / Error';
+                }
+                modalPingBtn.textContent = 'Test Latency';
+            });
+        }
+        if (modalCopyBtn) {
+            modalCopyBtn.addEventListener('click', () => {
+                haptic(20);
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(window.location.href);
+                    modalCopyBtn.textContent = 'Copied!';
+                    setTimeout(() => { modalCopyBtn.textContent = 'Copy Link'; }, 2000);
+                }
+            });
         }
 
         // WebCrypto E2EE Authenticated Encryption (CTR-HMAC-SHA256)
