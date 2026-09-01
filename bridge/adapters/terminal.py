@@ -76,14 +76,32 @@ class AppleTerminalAdapter(TerminalAdapter):
         # Check action mode
         if action == "interrupt" or text == "\x03":
             action_desc = "Interrupt (Ctrl+C)"
+            if target.pid:
+                try:
+                    import os, signal
+                    os.kill(target.pid, signal.SIGINT)
+                except Exception:
+                    pass
+
             script = f'''
             tell application "Terminal"
                 {tab_finder}
                 if foundTab is not missing value then
-                    do script (ASCII character 3) in foundTab
+                    set selected of foundTab to true
+                    set w to first window whose tabs contains foundTab
+                    set index of w to 1
+                    activate
+                    tell application "System Events"
+                        tell process "Terminal"
+                            keystroke "c" using control down
+                        end tell
+                    end tell
                     return "OK"
                 else
-                    return "ERROR: Terminal session not found"
+                    tell application "System Events"
+                        keystroke "c" using control down
+                    end tell
+                    return "OK"
                 end if
             end tell
             '''

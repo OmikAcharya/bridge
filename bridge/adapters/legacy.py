@@ -20,7 +20,7 @@ class LegacyPasteAdapter(TerminalAdapter):
         return target.id in ("focused", "active", "legacy") or target.agent == "legacy"
 
     def send(self, target: Target, text: str, action: str = "execute") -> DeliveryResult:
-        if not text:
+        if not text and action not in ("interrupt", "raw_enter"):
             return DeliveryResult(
                 success=False,
                 target_id=target.id,
@@ -28,6 +28,46 @@ class LegacyPasteAdapter(TerminalAdapter):
                 adapter_used=self.name,
                 error="Prompt text is empty."
             )
+
+        if action == "interrupt" or text == "\x03":
+            try:
+                applescript = 'tell application "System Events" to keystroke "c" using control down'
+                subprocess.run(["osascript", "-e", applescript], check=True, capture_output=True, timeout=3.0)
+                return DeliveryResult(
+                    success=True,
+                    target_id=target.id,
+                    target_name="Focused Application",
+                    adapter_used=self.name,
+                    message="Sent Ctrl+C interrupt to focused application"
+                )
+            except Exception as e:
+                return DeliveryResult(
+                    success=False,
+                    target_id=target.id,
+                    target_name="Focused Application",
+                    adapter_used=self.name,
+                    error=f"Interrupt failed: {str(e)}"
+                )
+
+        if action == "raw_enter" or text == "\n":
+            try:
+                applescript = 'tell application "System Events" to key code 36'
+                subprocess.run(["osascript", "-e", applescript], check=True, capture_output=True, timeout=3.0)
+                return DeliveryResult(
+                    success=True,
+                    target_id=target.id,
+                    target_name="Focused Application",
+                    adapter_used=self.name,
+                    message="Sent Return (Enter) to focused application"
+                )
+            except Exception as e:
+                return DeliveryResult(
+                    success=False,
+                    target_id=target.id,
+                    target_name="Focused Application",
+                    adapter_used=self.name,
+                    error=f"Return failed: {str(e)}"
+                )
 
         # 1. Preserve current clipboard content
         prev_clipboard = None
