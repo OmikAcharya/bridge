@@ -20,7 +20,7 @@ class LegacyPasteAdapter(TerminalAdapter):
         return target.id in ("focused", "active", "legacy") or target.agent == "legacy"
 
     def send(self, target: Target, text: str, action: str = "execute") -> DeliveryResult:
-        if not text:
+        if not text and action not in ("interrupt", "raw_enter"):
             return DeliveryResult(
                 success=False,
                 target_id=target.id,
@@ -29,8 +29,57 @@ class LegacyPasteAdapter(TerminalAdapter):
                 error="Prompt text is empty."
             )
 
+        if action == "interrupt" or text == "\x03":
+            try:
+                applescript = 'tell application "System Events" to keystroke "c" using control down'
+                subprocess.run(["osascript", "-e", applescript], check=True, capture_output=True, timeout=3.0)
+                return DeliveryResult(
+                    success=True,
+                    target_id=target.id,
+                    target_name="Focused Application",
+                    adapter_used=self.name,
+                    message="Sent Ctrl+C interrupt to focused application"
+                )
+            except Exception as e:
+                return DeliveryResult(
+                    success=False,
+                    target_id=target.id,
+                    target_name="Focused Application",
+                    adapter_used=self.name,
+                    error=f"Interrupt failed: {str(e)}"
+                )
+
+        if action == "raw_enter" or text == "\n":
+            try:
+                applescript = 'tell application "System Events" to key code 36'
+                subprocess.run(["osascript", "-e", applescript], check=True, capture_output=True, timeout=3.0)
+                return DeliveryResult(
+                    success=True,
+                    target_id=target.id,
+                    target_name="Focused Application",
+                    adapter_used=self.name,
+                    message="Sent Return (Enter) to focused application"
+                )
+            except Exception as e:
+                return DeliveryResult(
+                    success=False,
+                    target_id=target.id,
+                    target_name="Focused Application",
+                    adapter_used=self.name,
+                    error=f"Return failed: {str(e)}"
+                )
+
+        # 1. Preserve current clipboard content
+        prev_clipboard = None
         try:
-            # 1. Put prompt into macOS clipboard
+            p = subprocess.run(["pbpaste"], capture_output=True, timeout=1.0)
+            if p.returncode == 0:
+                prev_clipboard = p.stdout
+        except Exception:
+            pass
+
+        try:
+            # 2. Put prompt into macOS clipboard
             subprocess.run(
                 ["pbcopy"],
                 input=text.encode("utf-8"),
@@ -38,7 +87,7 @@ class LegacyPasteAdapter(TerminalAdapter):
                 timeout=2.0
             )
 
-            # 2. Paste into active application via AppleScript keystrokes
+            # 3. Paste into active application via AppleScript keystrokes
             if action in ("paste_and_enter", "execute"):
                 applescript = (
                     'tell application "System Events"\n'
@@ -81,3 +130,14 @@ class LegacyPasteAdapter(TerminalAdapter):
                 adapter_used=self.name,
                 error=f"Legacy paste failed: {str(e)}"
             )
+        finally:
+            if prev_clipboard is not None:
+                def _restore(data):
+                    import time
+                    time.sleep(0.35)
+                    try:
+                        subprocess.run(["pbcopy"], input=data, timeout=1.0)
+                    except Exception:
+                        pass
+                import threading
+                threading.Thread(target=_restore, args=(prev_clipboard,), daemon=True).start()

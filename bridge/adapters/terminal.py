@@ -4,14 +4,24 @@ Delivers input directly to a specific Terminal.app tab or TTY session.
 Supports both background direct execution (with Enter) and non-executing paste.
 """
 
+import re
 import subprocess
 from bridge.adapters.base import TerminalAdapter
 from bridge.models import Target, DeliveryResult
 
 
+def sanitize_tty(tty: str) -> str:
+    """Sanitizes TTY device path to alphanumeric and safe path characters."""
+    if not tty or not re.match(r'^[a-zA-Z0-9_/.-]+$', tty):
+        return ""
+    return tty
+
+
 def escape_for_applescript(text: str) -> str:
     """Escapes string characters for safe embedding inside an AppleScript literal."""
-    escaped = text.replace('\\', '\\\\').replace('"', '\\"').replace('\r\n', '\n').replace('\r', '\n')
+    # Strip null bytes and normalize unicode paragraph/line separators
+    sanitized = text.replace('\0', '').replace('\u2028', '\n').replace('\u2029', '\n')
+    escaped = sanitized.replace('\\', '\\\\').replace('"', '\\"').replace('\r\n', '\n').replace('\r', '\n')
     return escaped
 
 
@@ -37,12 +47,12 @@ class AppleTerminalAdapter(TerminalAdapter):
                 error="Prompt text is empty."
             )
 
-        tty = target.tty
-        win_idx = target.win_idx
-        tab_idx = target.tab_idx
+        tty = sanitize_tty(target.tty)
+        win_idx = int(target.win_idx) if target.win_idx and str(target.win_idx).isdigit() else 0
+        tab_idx = int(target.tab_idx) if target.tab_idx and str(target.tab_idx).isdigit() else 0
         tab_finder = f'''
         set foundTab to missing value
-        if {win_idx if win_idx else 0} > 0 and {tab_idx if tab_idx else 0} > 0 then
+        if {win_idx} > 0 and {tab_idx} > 0 then
             try
                 set candTab to tab {tab_idx} of window {win_idx}
                 if "{tty}" is "" or tty of candTab is "{tty}" then
@@ -66,14 +76,32 @@ class AppleTerminalAdapter(TerminalAdapter):
         # Check action mode
         if action == "interrupt" or text == "\x03":
             action_desc = "Interrupt (Ctrl+C)"
+            if target.pid:
+                try:
+                    import os, signal
+                    os.kill(target.pid, signal.SIGINT)
+                except Exception:
+                    pass
+
             script = f'''
             tell application "Terminal"
                 {tab_finder}
                 if foundTab is not missing value then
-                    do script (ASCII character 3) in foundTab
+                    set selected of foundTab to true
+                    set w to first window whose tabs contains foundTab
+                    set index of w to 1
+                    activate
+                    tell application "System Events"
+                        tell process "Terminal"
+                            keystroke "c" using control down
+                        end tell
+                    end tell
                     return "OK"
                 else
-                    return "ERROR: Terminal session not found"
+                    tell application "System Events"
+                        keystroke "c" using control down
+                    end tell
+                    return "OK"
                 end if
             end tell
             '''
@@ -183,12 +211,12 @@ class AppleTerminalAdapter(TerminalAdapter):
 
     def get_history(self, target: Target, lines: int = 50) -> str:
         """Retrieves recent terminal output history from the target tab."""
-        tty = target.tty
-        win_idx = target.win_idx
-        tab_idx = target.tab_idx
+        tty = sanitize_tty(target.tty)
+        win_idx = int(target.win_idx) if target.win_idx and str(target.win_idx).isdigit() else 0
+        tab_idx = int(target.tab_idx) if target.tab_idx and str(target.tab_idx).isdigit() else 0
         tab_finder = f'''
         set foundTab to missing value
-        if {win_idx if win_idx else 0} > 0 and {tab_idx if tab_idx else 0} > 0 then
+        if {win_idx} > 0 and {tab_idx} > 0 then
             try
                 set candTab to tab {tab_idx} of window {win_idx}
                 if "{tty}" is "" or tty of candTab is "{tty}" then

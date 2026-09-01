@@ -219,6 +219,39 @@ class TestAdaptersAndEscaping(unittest.TestCase):
         self.assertIsInstance(factory.get_adapter(iterm_target), ITermAdapter)
         self.assertIsInstance(factory.get_adapter(legacy_target), LegacyPasteAdapter)
 
+    def test_adapter_interrupt_and_raw_enter_empty_text_allowed(self):
+        """Adapters must accept empty text when action is interrupt or raw_enter."""
+        term_adapter = AppleTerminalAdapter()
+        iterm_adapter = ITermAdapter()
+        legacy_adapter = LegacyPasteAdapter()
+
+        target_term = Target(id="t1", name="t1", display_name="t1", agent="claude", agent_name="Claude", application="Terminal", tty="/dev/ttys001")
+        target_iterm = Target(id="t2", name="t2", display_name="t2", agent="codex", agent_name="Codex", application="iTerm", tty="/dev/ttys002")
+        target_legacy = Target(id="focused", name="focused", display_name="focused", agent="legacy", agent_name="Legacy", application="Active Window")
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
+            
+            # 1. Interrupt (Ctrl+C)
+            res1 = term_adapter.send(target_term, text="", action="interrupt")
+            self.assertTrue(res1.success)
+
+            res2 = iterm_adapter.send(target_iterm, text="", action="interrupt")
+            self.assertTrue(res2.success)
+
+            res3 = legacy_adapter.send(target_legacy, text="", action="interrupt")
+            self.assertTrue(res3.success)
+
+            # 2. Raw Enter
+            res4 = term_adapter.send(target_term, text="", action="raw_enter")
+            self.assertTrue(res4.success)
+
+            res5 = iterm_adapter.send(target_iterm, text="", action="raw_enter")
+            self.assertTrue(res5.success)
+
+            res6 = legacy_adapter.send(target_legacy, text="", action="raw_enter")
+            self.assertTrue(res6.success)
+
 
 class TestPromptRouter(unittest.TestCase):
     def setUp(self):

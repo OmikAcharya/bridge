@@ -6,6 +6,7 @@ import sys
 import os
 import json
 import socket
+import secrets
 import logging
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
@@ -1972,6 +1973,9 @@ class BridgeServer(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
+MAX_BODY_SIZE = 64 * 1024  # 64 KB limit to prevent memory exhaustion DoS
+
+
 class BridgeRequestHandler(BaseHTTPRequestHandler):
     """Handles HTTP requests for the bridge with HTTP/1.1 keep-alive."""
     protocol_version = "HTTP/1.1"
@@ -2011,11 +2015,31 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
         auth_hdr = self.headers.get("Authorization", "")
         if auth_hdr.startswith("Bearer "):
             token = auth_hdr[7:].strip()
-            if token == self.config.auth_token:
+            if secrets.compare_digest(token, self.config.auth_token):
                 return True
-        if self.headers.get("X-Auth-Token") == self.config.auth_token:
+        x_token = self.headers.get("X-Auth-Token", "")
+        if x_token and secrets.compare_digest(x_token, self.config.auth_token):
             return True
         return False
+
+    def _is_csrf_safe(self) -> bool:
+        """Protects local HTTP daemon against browser Cross-Site Request Forgery (CSRF)."""
+        sec_site = self.headers.get("Sec-Fetch-Site", "").lower()
+        if sec_site == "cross-site":
+            return False
+
+        origin = self.headers.get("Origin", "")
+        if origin:
+            parsed = urllib.parse.urlparse(origin)
+            host = parsed.hostname or ""
+            # Allowed origins: loopback, local LAN, mDNS, or hosted client on github.io
+            if (
+                host not in ("localhost", "127.0.0.1", get_lan_ip(), get_mdns_hostname())
+                and not host.endswith("github.io")
+                and not host.endswith(".local")
+            ):
+                return False
+        return True
 
     def do_OPTIONS(self):
         try:
@@ -2117,7 +2141,8 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 target_id = params.get("target", ["auto"])[0]
                 mode = params.get("mode", ["ultra"])[0].lower()
                 try:
-                    lines_count = int(params.get("lines", ["40"])[0])
+                    raw_lines = int(params.get("lines", ["40"])[0])
+                    lines_count = min(max(1, raw_lines), 200)
                 except ValueError:
                     lines_count = 40
 
@@ -2249,6 +2274,19 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 self.close_connection = True
             return
 
+        if not self._is_csrf_safe():
+            try:
+                err_b = b'{"success":false,"error":"Cross-site requests prohibited"}'
+                self.send_response(403)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err_b)))
+                self.end_headers()
+                self.wfile.write(err_b)
+            except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, socket.error):
+                self.close_connection = True
+            return
+
         if not self._is_authenticated():
             try:
                 err_b = b'{"success":false,"error":"Unauthorized"}'
@@ -2264,7 +2302,17 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
 
         try:
             length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length)
+            if length > MAX_BODY_SIZE:
+                err_b = b'{"success":false,"error":"Payload exceeds maximum allowed size (64KB)"}'
+                self.send_response(413)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err_b)))
+                self.end_headers()
+                self.wfile.write(err_b)
+                return
+
+            body = self.rfile.read(max(0, length))
             data = json.loads(body.decode("utf-8"))
 
             prompt = data.get("prompt", "")
