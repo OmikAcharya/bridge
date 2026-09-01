@@ -38,7 +38,7 @@ class TestServerAPI(unittest.TestCase):
             self.assertEqual(resp.status, 200)
             body = resp.read().decode("utf-8")
             self.assertIn("<!DOCTYPE html>", body)
-            self.assertIn("Terminal Chat", body)
+            self.assertIn("Prompt Bridge", body)
             self.assertIn("bentoGrid", body)
 
     def test_get_ping(self):
