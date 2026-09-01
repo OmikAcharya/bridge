@@ -39,11 +39,45 @@ class TestP2PAndQR(unittest.TestCase):
         self.assertTrue(p2p.verify_auth_token("secretkey_xyz"))
         self.assertFalse(p2p.verify_auth_token("wrong_key"))
 
+    def test_p2p_crypto_e2ee_roundtrip_and_tamper(self):
+        from bridge.p2p import P2PCrypto
+        crypto = P2PCrypto("my_e2ee_shared_key_123")
+        payload = json.dumps({"action": "prompt", "prompt": "pytest", "target": "auto"})
+
+        # 1. Encrypt and decrypt roundtrip
+        envelope = crypto.encrypt(payload)
+        self.assertIn("nonce", envelope)
+        self.assertIn("ct", envelope)
+        self.assertIn("tag", envelope)
+        decrypted = crypto.decrypt(envelope)
+        self.assertEqual(decrypted, payload)
+
+        # 2. Tampered ciphertext must raise ValueError
+        tampered_env = dict(envelope)
+        # Flip a hex character in ct
+        orig_ct = tampered_env["ct"]
+        tampered_env["ct"] = ("0" if orig_ct[0] != "0" else "1") + orig_ct[1:]
+        with self.assertRaises(ValueError):
+            crypto.decrypt(tampered_env)
+
+        # 3. Tampered nonce must raise ValueError
+        tampered_nonce_env = dict(envelope)
+        orig_nonce = tampered_nonce_env["nonce"]
+        tampered_nonce_env["nonce"] = ("0" if orig_nonce[0] != "0" else "1") + orig_nonce[1:]
+        with self.assertRaises(ValueError):
+            crypto.decrypt(tampered_nonce_env)
+
+        # 4. Wrong key must raise ValueError
+        wrong_crypto = P2PCrypto("attacker_key_999")
+        with self.assertRaises(ValueError):
+            wrong_crypto.decrypt(envelope)
+
     def test_p2p_message_handling(self):
         from bridge.discovery import SessionDiscovery
         from bridge.targets import TargetManager
         from bridge.adapters.factory import AdapterFactory
         from bridge.router import PromptRouter
+        from bridge.p2p import P2PCrypto
 
         cfg = Config()
         discovery = SessionDiscovery()
@@ -52,6 +86,7 @@ class TestP2PAndQR(unittest.TestCase):
         router = PromptRouter(target_manager=target_manager, adapter_factory=adapter_factory)
 
         p2p = P2PManager(room_id="room123", auth_key="key123")
+        phone_crypto = P2PCrypto("key123")
 
         class MockClient:
             def __init__(self):
@@ -61,25 +96,30 @@ class TestP2PAndQR(unittest.TestCase):
 
         mock_client = MockClient()
 
-        # 1. Test ping
-        p2p._handle_p2p_message(mock_client, "pb/room123/phone", json.dumps({
-            "id": 10, "action": "ping", "key": "key123"
-        }), router, target_manager)
+        # 1. Test encrypted ping request and encrypted pong response
+        enc_ping = phone_crypto.encrypt(json.dumps({"id": 10, "action": "ping"}))
+        p2p._handle_p2p_message(mock_client, "pb/room123/phone", json.dumps(enc_ping), router, target_manager)
         self.assertEqual(len(mock_client.published), 1)
-        self.assertEqual(mock_client.published[0][1]["action"], "pong")
+        resp_env = mock_client.published[0][1]
+        decrypted_resp = json.loads(phone_crypto.decrypt(resp_env))
+        self.assertEqual(decrypted_resp["action"], "pong")
+        self.assertEqual(decrypted_resp["id"], 10)
 
-        # 2. Test get_targets
-        p2p._handle_p2p_message(mock_client, "pb/room123/phone", json.dumps({
-            "id": 11, "action": "get_targets", "key": "key123"
-        }), router, target_manager)
+        # 2. Test encrypted get_targets
+        enc_targets_req = phone_crypto.encrypt(json.dumps({"id": 11, "action": "get_targets"}))
+        p2p._handle_p2p_message(mock_client, "pb/room123/phone", json.dumps(enc_targets_req), router, target_manager)
         self.assertEqual(len(mock_client.published), 2)
-        self.assertEqual(mock_client.published[1][1]["action"], "targets_response")
+        resp_targets_env = mock_client.published[1][1]
+        dec_targets = json.loads(phone_crypto.decrypt(resp_targets_env))
+        self.assertEqual(dec_targets["action"], "targets_response")
+        self.assertEqual(dec_targets["id"], 11)
 
-        # 3. Test unauthorized key
-        p2p._handle_p2p_message(mock_client, "pb/room123/phone", json.dumps({
-            "id": 12, "action": "ping", "key": "wrong_key"
-        }), router, target_manager)
-        self.assertEqual(mock_client.published[2][1]["action"], "error")
+        # 3. Test tampered ciphertext rejected without response
+        tampered = dict(enc_ping)
+        tampered["ct"] = "00" + tampered["ct"][2:]
+        p2p._handle_p2p_message(mock_client, "pb/room123/phone", json.dumps(tampered), router, target_manager)
+        # Message count should remain 2 (tampered message discarded)
+        self.assertEqual(len(mock_client.published), 2)
 
 
 class TestP2PServerEndpoints(unittest.TestCase):

@@ -1787,15 +1787,107 @@
             }
         }
 
-        if (isP2P && p2pRoom && typeof mqtt !== 'undefined') {
-            initP2PRelay(p2pRoom, p2pKey);
-        } else {
-            updateConnectionBadge();
+        // WebCrypto E2EE Authenticated Encryption (CTR-HMAC-SHA256)
+        class E2EECryptoClient {
+            constructor(rawKey) {
+                this.rawKey = rawKey;
+                this.kEnc = null;
+                this.kMac = null;
+                this.readyPromise = this.init();
+            }
+
+            async init() {
+                const enc = new TextEncoder();
+                const masterDigest = await crypto.subtle.digest('SHA-256', enc.encode(this.rawKey));
+                const masterKey = await crypto.subtle.importKey('raw', masterDigest, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+                const kEncBytes = await crypto.subtle.sign('HMAC', masterKey, enc.encode('enc'));
+                const kMacBytes = await crypto.subtle.sign('HMAC', masterKey, enc.encode('mac'));
+                this.kEnc = await crypto.subtle.importKey('raw', kEncBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+                this.kMac = await crypto.subtle.importKey('raw', kMacBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+            }
+
+            async encrypt(plaintext) {
+                await this.readyPromise;
+                const enc = new TextEncoder();
+                const data = enc.encode(plaintext);
+                const nonce = new Uint8Array(16);
+                crypto.getRandomValues(nonce);
+
+                const numBlocks = Math.ceil(data.length / 32);
+                const ksChunks = [];
+                for (let i = 0; i < numBlocks; i++) {
+                    const ctr = new Uint8Array(20);
+                    ctr.set(nonce, 0);
+                    new DataView(ctr.buffer).setUint32(16, i, false);
+                    const block = await crypto.subtle.sign('HMAC', this.kEnc, ctr);
+                    ksChunks.push(new Uint8Array(block));
+                }
+
+                const totalKs = new Uint8Array(numBlocks * 32);
+                let off = 0;
+                for (const c of ksChunks) { totalKs.set(c, off); off += c.length; }
+
+                const ct = new Uint8Array(data.length);
+                for (let i = 0; i < data.length; i++) {
+                    ct[i] = data[i] ^ totalKs[i];
+                }
+
+                const macInput = new Uint8Array(nonce.length + ct.length);
+                macInput.set(nonce, 0);
+                macInput.set(ct, nonce.length);
+                const tagBytes = await crypto.subtle.sign('HMAC', this.kMac, macInput);
+
+                const tagHex = Array.from(new Uint8Array(tagBytes)).map(b => b.toString(16).padStart(2, '0')).join('');
+                const nonceHex = Array.from(nonce).map(b => b.toString(16).padStart(2, '0')).join('');
+                const ctHex = Array.from(ct).map(b => b.toString(16).padStart(2, '0')).join('');
+
+                return { nonce: nonceHex, ct: ctHex, tag: tagHex };
+            }
+
+            async decrypt(envelope) {
+                await this.readyPromise;
+                const dec = new TextDecoder();
+                const nonce = new Uint8Array(envelope.nonce.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                const ct = new Uint8Array(envelope.ct.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+
+                const macInput = new Uint8Array(nonce.length + ct.length);
+                macInput.set(nonce, 0);
+                macInput.set(ct, nonce.length);
+                const tagBytes = await crypto.subtle.sign('HMAC', this.kMac, macInput);
+                const expectedTag = Array.from(new Uint8Array(tagBytes)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+                if (expectedTag !== envelope.tag) {
+                    throw new Error('MAC verification failed - message tampered');
+                }
+
+                const numBlocks = Math.ceil(ct.length / 32);
+                const ksChunks = [];
+                for (let i = 0; i < numBlocks; i++) {
+                    const ctr = new Uint8Array(20);
+                    ctr.set(nonce, 0);
+                    new DataView(ctr.buffer).setUint32(16, i, false);
+                    const block = await crypto.subtle.sign('HMAC', this.kEnc, ctr);
+                    ksChunks.push(new Uint8Array(block));
+                }
+
+                const totalKs = new Uint8Array(numBlocks * 32);
+                let off = 0;
+                for (const c of ksChunks) { totalKs.set(c, off); off += c.length; }
+
+                const pt = new Uint8Array(ct.length);
+                for (let i = 0; i < ct.length; i++) {
+                    pt[i] = ct[i] ^ totalKs[i];
+                }
+                return dec.decode(pt);
+            }
         }
+
+        let p2pCrypto = null;
 
         function initP2PRelay(room, key) {
             updateConnectionBadge('p2p_connecting');
             try {
+                p2pCrypto = new E2EECryptoClient(key);
                 mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
                     clientId: 'phone_' + Math.random().toString(16).slice(2, 10),
                     clean: true,
@@ -1811,9 +1903,14 @@
                     fetchActivityTail();
                 });
 
-                mqttClient.on('message', (topic, payload) => {
+                mqttClient.on('message', async (topic, payload) => {
                     try {
-                        const data = JSON.parse(payload.toString());
+                        const raw = JSON.parse(payload.toString());
+                        let data = raw;
+                        if (raw && raw.ct && raw.nonce && raw.tag && p2pCrypto) {
+                            const decryptedJson = await p2pCrypto.decrypt(raw);
+                            data = JSON.parse(decryptedJson);
+                        }
                         if (data.id && pendingRequests.has(data.id)) {
                             const { resolve } = pendingRequests.get(data.id);
                             pendingRequests.delete(data.id);
@@ -1832,12 +1929,15 @@
             }
         }
 
-        function p2pRequest(action, params = {}) {
+        async function p2pRequest(action, params = {}) {
+            if (!mqttClient || !isP2PReady || !p2pCrypto) {
+                throw new Error('P2P not connected');
+            }
+            const id = reqSeq++;
+            const msg = Object.assign({ id, action, key: p2pKey }, params);
+            const encryptedEnvelope = await p2pCrypto.encrypt(JSON.stringify(msg));
+
             return new Promise((resolve, reject) => {
-                if (!mqttClient || !isP2PReady) {
-                    return reject(new Error('P2P not connected'));
-                }
-                const id = reqSeq++;
                 const timeout = setTimeout(() => {
                     if (pendingRequests.has(id)) {
                         pendingRequests.delete(id);
@@ -1852,8 +1952,7 @@
                     }
                 });
 
-                const msg = Object.assign({ id, action, key: p2pKey }, params);
-                mqttClient.publish(`pb/${p2pRoom}/mac`, JSON.stringify(msg));
+                mqttClient.publish(`pb/${p2pRoom}/mac`, JSON.stringify(encryptedEnvelope));
             });
         }
 

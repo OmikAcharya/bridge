@@ -1,6 +1,6 @@
 """
 Peer-to-Peer (P2P) Zero-Exposure Relay & Terminal Bridge for Prompt Bridge.
-Enables instant, end-to-end encrypted remote terminal interaction over public networks
+Enables instant, end-to-end encrypted (E2EE) remote terminal interaction over public networks
 without exposing local ports or IP addresses.
 """
 
@@ -8,11 +8,13 @@ import os
 import secrets
 import struct
 import socket
+import hmac
+import hashlib
 import threading
 import time
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 from bridge.qrcode import print_qr_code
 from bridge.models import PromptRequest
@@ -24,6 +26,58 @@ logger = logging.getLogger("PromptBridge.P2P")
 DEFAULT_HOSTED_CLIENT_URL = os.environ.get("BRIDGE_CLIENT_URL", "https://omikacharya.github.io/bridge")
 DEFAULT_MQTT_BROKER = os.environ.get("BRIDGE_MQTT_BROKER", "broker.emqx.io")
 DEFAULT_MQTT_PORT = int(os.environ.get("BRIDGE_MQTT_PORT", "1883"))
+
+
+class P2PCrypto:
+    """
+    Standard-library CTR + Encrypt-then-MAC (HMAC-SHA256) Authenticated Encryption.
+    Provides true zero-knowledge end-to-end encryption between Phone and Mac.
+    """
+
+    def __init__(self, raw_key: str):
+        self.master_key = hashlib.sha256(raw_key.encode("utf-8")).digest()
+        self.k_enc = hmac.new(self.master_key, b"enc", hashlib.sha256).digest()
+        self.k_mac = hmac.new(self.master_key, b"mac", hashlib.sha256).digest()
+
+    def encrypt(self, plaintext: str) -> dict:
+        """Encrypts plaintext string into an authenticated {nonce, ct, tag} envelope."""
+        data = plaintext.encode("utf-8")
+        nonce = secrets.token_bytes(16)
+        num_blocks = (len(data) + 31) // 32
+        blocks = [
+            hmac.new(self.k_enc, nonce + struct.pack(">I", i), hashlib.sha256).digest()
+            for i in range(num_blocks)
+        ]
+        keystream = b"".join(blocks)[:len(data)]
+        ciphertext = bytes(b ^ k for b, k in zip(data, keystream))
+        tag = hmac.new(self.k_mac, nonce + ciphertext, hashlib.sha256).hexdigest()
+        return {
+            "nonce": nonce.hex(),
+            "ct": ciphertext.hex(),
+            "tag": tag
+        }
+
+    def decrypt(self, envelope: dict) -> str:
+        """Verifies MAC and decrypts ciphertext envelope into plaintext string."""
+        if not isinstance(envelope, dict) or "nonce" not in envelope or "ct" not in envelope or "tag" not in envelope:
+            raise ValueError("Malformed ciphertext envelope")
+
+        nonce = bytes.fromhex(envelope["nonce"])
+        ciphertext = bytes.fromhex(envelope["ct"])
+        tag = envelope["tag"]
+
+        expected_tag = hmac.new(self.k_mac, nonce + ciphertext, hashlib.sha256).hexdigest()
+        if not secrets.compare_digest(tag, expected_tag):
+            raise ValueError("MAC verification failed - message tampered or wrong key")
+
+        num_blocks = (len(ciphertext) + 31) // 32
+        blocks = [
+            hmac.new(self.k_enc, nonce + struct.pack(">I", i), hashlib.sha256).digest()
+            for i in range(num_blocks)
+        ]
+        keystream = b"".join(blocks)[:len(ciphertext)]
+        plaintext = bytes(b ^ k for b, k in zip(ciphertext, keystream))
+        return plaintext.decode("utf-8")
 
 
 class MiniMQTTClient:
@@ -67,7 +121,7 @@ class MiniMQTTClient:
             payload = struct.pack(">H", msg_id) + struct.pack(">H", len(top_b)) + top_b + b"\x00"
             pkt = bytearray([0x82, len(payload)]) + payload
             self.sock.sendall(pkt)
-            self.sock.recv(5) # Wait for SUBACK
+            self.sock.recv(5)
 
     def publish(self, topic: str, payload_str: str):
         with self._lock:
@@ -98,7 +152,7 @@ class MiniMQTTClient:
                 except Exception:
                     pass
 
-    def recv_message(self, timeout: float = 1.0) -> Optional[tuple]:
+    def recv_message(self, timeout: float = 1.0) -> Optional[Tuple[str, str]]:
         if not self.sock:
             return None
         self.sock.settimeout(timeout)
@@ -152,6 +206,7 @@ class P2PManager:
         self.auth_key = auth_key or secrets.token_urlsafe(18)
         self.client_url = (client_url or DEFAULT_HOSTED_CLIENT_URL).rstrip("/")
         self.created_at = time.time()
+        self.crypto = P2PCrypto(self.auth_key)
         self.relay_client: Optional[MiniMQTTClient] = None
         self.worker_thread: Optional[threading.Thread] = None
         self.running = False
@@ -258,26 +313,36 @@ class P2PManager:
 
     def _handle_p2p_message(self, client: MiniMQTTClient, reply_topic: str, payload_str: str, router, target_manager):
         try:
-            req = json.loads(payload_str)
+            raw_data = json.loads(payload_str)
+            # Decrypt if encrypted envelope
+            if isinstance(raw_data, dict) and "ct" in raw_data and "nonce" in raw_data and "tag" in raw_data:
+                try:
+                    decrypted_text = self.crypto.decrypt(raw_data)
+                    req = json.loads(decrypted_text)
+                    is_encrypted = True
+                except Exception as e:
+                    logger.warning("Failed to decrypt incoming P2P message: %s", e)
+                    return
+            else:
+                req = raw_data
+                is_encrypted = False
+                key = req.get("key", "")
+                if not self.verify_auth_token(key):
+                    err_resp = {"id": req.get("id"), "action": "error", "error": "Unauthorized key"}
+                    client.publish(reply_topic, json.dumps(err_resp))
+                    return
+
             req_id = req.get("id")
             action = req.get("action")
-            key = req.get("key", "")
 
-            # Security verification
-            if not self.verify_auth_token(key):
-                client.publish(reply_topic, json.dumps({
-                    "id": req_id,
-                    "action": "error",
-                    "error": "Unauthorized key"
-                }))
-                return
+            response_payload = None
 
             if action == "ping":
-                client.publish(reply_topic, json.dumps({
+                response_payload = {
                     "id": req_id,
                     "action": "pong",
                     "status": "ok"
-                }))
+                }
 
             elif action == "get_targets":
                 targets = target_manager.get_targets() if target_manager else []
@@ -287,12 +352,12 @@ class P2PManager:
                     if t.agent in ("claude", "codex", "opencode", "aider", "agy") and t.id != "focused":
                         default_t = t.id
                         break
-                client.publish(reply_topic, json.dumps({
+                response_payload = {
                     "id": req_id,
                     "action": "targets_response",
                     "targets": targets_dict,
                     "default_target": default_t
-                }))
+                }
 
             elif action == "get_tail":
                 target_id = req.get("target", "auto")
@@ -301,28 +366,26 @@ class P2PManager:
 
                 target = target_manager.resolve(target_id) if target_manager else None
                 if not target:
-                    client.publish(reply_topic, json.dumps({
+                    response_payload = {
                         "id": req_id,
                         "action": "tail_response",
                         "success": False,
                         "error": f"Target '{target_id}' not found"
-                    }))
-                    return
-
-                adapter = get_adapter(target)
-                raw_history = adapter.get_history(target, lines=max(lines_count, 50))
-                content = compress_caveman_ultra(raw_history) if mode == "ultra" else format_raw_tail(raw_history, lines=lines_count)
-
-                client.publish(reply_topic, json.dumps({
-                    "id": req_id,
-                    "action": "tail_response",
-                    "success": True,
-                    "target_id": target.id,
-                    "target_name": target.name,
-                    "mode": mode,
-                    "content": content,
-                    "is_busy": target.is_busy
-                }))
+                    }
+                else:
+                    adapter = get_adapter(target)
+                    raw_history = adapter.get_history(target, lines=max(lines_count, 50))
+                    content = compress_caveman_ultra(raw_history) if mode == "ultra" else format_raw_tail(raw_history, lines=lines_count)
+                    response_payload = {
+                        "id": req_id,
+                        "action": "tail_response",
+                        "success": True,
+                        "target_id": target.id,
+                        "target_name": target.name,
+                        "mode": mode,
+                        "content": content,
+                        "is_busy": target.is_busy
+                    }
 
             elif action == "prompt":
                 prompt_text = req.get("prompt", "")
@@ -332,12 +395,20 @@ class P2PManager:
                 prompt_req = PromptRequest(prompt=prompt_text, target=target_id, action=act)
                 result = router.route(prompt_req) if router else None
 
-                client.publish(reply_topic, json.dumps({
+                response_payload = {
                     "id": req_id,
                     "action": "prompt_response",
                     "success": result.success if result else False,
                     "result": result.to_dict() if result else {}
-                }))
+                }
+
+            if response_payload is not None:
+                json_str = json.dumps(response_payload)
+                if is_encrypted:
+                    env = self.crypto.encrypt(json_str)
+                    client.publish(reply_topic, json.dumps(env))
+                else:
+                    client.publish(reply_topic, json_str)
 
         except Exception as e:
             logger.debug("Error processing P2P message: %s", e)
