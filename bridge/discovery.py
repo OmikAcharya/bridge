@@ -28,6 +28,28 @@ AGENT_PATTERNS: List[Tuple[str, str, str]] = [
 ]
 
 
+REDACT_PATTERNS = [
+    (r'(?i)(bearer\s+)[a-zA-Z0-9_\-\.]{8,}', r'\1[REDACTED]'),
+    (r'(?i)(token[=:\s]+)[a-zA-Z0-9_\-\.]{8,}', r'\1[REDACTED]'),
+    (r'(?i)(password[=:\s]+)[^\s]+', r'\1[REDACTED]'),
+    (r'(?i)(key[=:\s]+)[a-zA-Z0-9_\-\.]{8,}', r'\1[REDACTED]'),
+    (r'(?i)(secret[=:\s]+)[^\s]+', r'\1[REDACTED]'),
+    (r'(?i)(ghp_[a-zA-Z0-9]{20,})', r'[REDACTED]'),
+    (r'(?i)(sk-[a-zA-Z0-9]{20,})', r'[REDACTED]'),
+    (r'(?i)(://[^:\s]+:)[^@\s]+(@)', r'\1[REDACTED]\2'),
+]
+
+
+def redact_sensitive_cmd(cmd: str) -> str:
+    """Redacts API keys, passwords, and tokens from process argument lines."""
+    if not cmd:
+        return ""
+    redacted = cmd
+    for pattern, repl in REDACT_PATTERNS:
+        redacted = re.sub(pattern, repl, redacted)
+    return redacted
+
+
 def classify_command(cmd_line: str) -> Tuple[str, str]:
     """Classifies a command line string into (agent_name, agent_type)."""
     for pattern, name, agent_type in AGENT_PATTERNS:
@@ -162,11 +184,13 @@ class SessionDiscovery:
             is_busy = tab_info.get("busy", False)
             status = "busy" if is_busy else "ready"
             win_title = tab_info.get("win_name", "")
-            raw_cmd = best_proc["cmd"] if best_proc else ""
+            raw_cmd = redact_sensitive_cmd(best_proc["cmd"]) if best_proc else ""
             # Clean cmd for UI
             short_cmd = raw_cmd.split()[0] if raw_cmd else ""
             if "/" in short_cmd:
                 short_cmd = os.path.basename(short_cmd)
+
+            sanitized_procs = [redact_sensitive_cmd(p["cmd"]) for p in procs]
 
             target = Target(
                 id=target_id,
@@ -190,7 +214,7 @@ class SessionDiscovery:
                     "compact_cwd": compact_cwd,
                     "win_name": win_title,
                     "short_cmd": short_cmd,
-                    "procs": [p["cmd"] for p in procs]
+                    "procs": sanitized_procs
                 }
             )
             targets.append(target)
@@ -203,7 +227,7 @@ class SessionDiscovery:
                 win_name=win_title,
                 selected=tab_info.get("selected", False),
                 busy=is_busy,
-                procs=[p["cmd"] for p in procs],
+                procs=sanitized_procs,
                 pids=[p["pid"] for p in procs],
                 cwd=cwd,
                 foreground_pid=best_proc["pid"] if best_proc else None,

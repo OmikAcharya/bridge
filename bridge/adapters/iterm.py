@@ -6,7 +6,7 @@ Delivers input directly to a specific iTerm2 session or TTY without stealing GUI
 import subprocess
 from bridge.adapters.base import TerminalAdapter
 from bridge.models import Target, DeliveryResult
-from bridge.adapters.terminal import escape_for_applescript
+from bridge.adapters.terminal import escape_for_applescript, sanitize_tty
 
 
 class ITermAdapter(TerminalAdapter):
@@ -20,7 +20,7 @@ class ITermAdapter(TerminalAdapter):
         return target.application == "iTerm"
 
     def send(self, target: Target, text: str, action: str = "execute") -> DeliveryResult:
-        if not text:
+        if not text and action not in ("interrupt", "raw_enter"):
             return DeliveryResult(
                 success=False,
                 target_id=target.id,
@@ -29,18 +29,88 @@ class ITermAdapter(TerminalAdapter):
                 error="Prompt text is empty."
             )
 
-        tty = target.tty
-        escaped_text = escape_for_applescript(text)
-        newline_bool = "false" if action in ("paste", "no_enter") else "true"
+        tty = sanitize_tty(target.tty)
 
-        script = f'''
-        tell application "iTerm"
-            set foundSession to missing value
-            repeat with w in windows
-                repeat with t in tabs of w
-                    repeat with s in sessions of t
-                        if tty of s is "{tty}" then
-                            set foundSession to s
+        if action == "interrupt" or text == "\x03":
+            if target.pid:
+                try:
+                    import os, signal
+                    os.kill(target.pid, signal.SIGINT)
+                except Exception:
+                    pass
+
+            script = f'''
+            tell application "iTerm"
+                set foundSession to missing value
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        repeat with s in sessions of t
+                            if tty of s is "{tty}" then
+                                set foundSession to s
+                                exit repeat
+                            end if
+                        end repeat
+                        if foundSession is not missing value then exit repeat
+                    end repeat
+                    if foundSession is not missing value then exit repeat
+                end repeat
+
+                if foundSession is not missing value then
+                    tell foundSession
+                        write text (ASCII character 3) newline false
+                    end tell
+                    return "OK"
+                else
+                    tell application "System Events"
+                        keystroke "c" using control down
+                    end tell
+                    return "OK"
+                end if
+            end tell
+            '''
+        elif action == "raw_enter" or text == "\n":
+            script = f'''
+            tell application "iTerm"
+                set foundSession to missing value
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        repeat with s in sessions of t
+                            if tty of s is "{tty}" then
+                                set foundSession to s
+                                exit repeat
+                            end if
+                        end repeat
+                        if foundSession is not missing value then exit repeat
+                    end repeat
+                    if foundSession is not missing value then exit repeat
+                end repeat
+
+                if foundSession is not missing value then
+                    tell foundSession
+                        write text "" newline true
+                    end tell
+                    return "OK"
+                else
+                    return "ERROR: iTerm session not found"
+                end if
+            end tell
+            '''
+        else:
+            escaped_text = escape_for_applescript(text)
+            newline_bool = "false" if action in ("paste", "no_enter") else "true"
+
+            script = f'''
+            tell application "iTerm"
+                set foundSession to missing value
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        repeat with s in sessions of t
+                            if tty of s is "{tty}" then
+                                set foundSession to s
+                                exit repeat
+                            end if
+                        end repeat
+                        if foundSession is not missing value then
                             exit repeat
                         end if
                     end repeat
@@ -48,21 +118,17 @@ class ITermAdapter(TerminalAdapter):
                         exit repeat
                     end if
                 end repeat
-                if foundSession is not missing value then
-                    exit repeat
-                end if
-            end repeat
 
-            if foundSession is not missing value then
-                tell foundSession
-                    write text "{escaped_text}" newline {newline_bool}
-                end tell
-                return "OK"
-            else
-                return "ERROR: iTerm session not found"
-            end if
-        end tell
-        '''
+                if foundSession is not missing value then
+                    tell foundSession
+                        write text "{escaped_text}" newline {newline_bool}
+                    end tell
+                    return "OK"
+                else
+                    return "ERROR: iTerm session not found"
+                end if
+            end tell
+            '''
 
         try:
             res = subprocess.run(
@@ -112,7 +178,7 @@ class ITermAdapter(TerminalAdapter):
 
     def get_history(self, target: Target, lines: int = 50) -> str:
         """Retrieves recent terminal output history from the iTerm2 session."""
-        tty = target.tty
+        tty = sanitize_tty(target.tty)
         script = f'''
         tell application "iTerm"
             set foundSession to missing value
