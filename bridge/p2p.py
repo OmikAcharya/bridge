@@ -24,7 +24,11 @@ from bridge.adapters.factory import get_adapter
 logger = logging.getLogger("PromptBridge.P2P")
 
 DEFAULT_HOSTED_CLIENT_URL = os.environ.get("BRIDGE_CLIENT_URL", "https://omikacharya.github.io/bridge")
-DEFAULT_MQTT_BROKER = os.environ.get("BRIDGE_MQTT_BROKER", "broker.emqx.io")
+DEFAULT_MQTT_BROKERS = [
+    ("broker.hivemq.com", 1883),
+    ("broker.emqx.io", 1883),
+]
+DEFAULT_MQTT_BROKER = os.environ.get("BRIDGE_MQTT_BROKER", "broker.hivemq.com")
 DEFAULT_MQTT_PORT = int(os.environ.get("BRIDGE_MQTT_PORT", "1883"))
 
 
@@ -287,14 +291,16 @@ class P2PManager:
     def _relay_loop(self, router, target_manager):
         topic_mac = f"pb/{self.room_id}/mac"
         topic_phone = f"pb/{self.room_id}/phone"
+        broker_idx = 0
 
         while self.running:
+            host, port = DEFAULT_MQTT_BROKERS[broker_idx % len(DEFAULT_MQTT_BROKERS)]
             try:
-                client = MiniMQTTClient(client_id=f"pb_mac_{self.room_id}")
+                client = MiniMQTTClient(host=host, port=port, client_id=f"pb_mac_{self.room_id}")
                 client.connect()
                 client.subscribe(topic_mac)
                 self.relay_client = client
-                logger.info("Connected to P2P relay broker for room %s", self.room_id)
+                logger.info("Connected to P2P relay broker %s for room %s", host, self.room_id)
 
                 last_ping = time.time()
                 while self.running and client.running:
@@ -308,7 +314,8 @@ class P2PManager:
                         last_ping = time.time()
 
             except Exception as e:
-                logger.debug("P2P relay loop reconnecting: %s", e)
+                logger.debug("P2P relay loop (%s) reconnecting: %s", host, e)
+                broker_idx += 1
                 time.sleep(2.0)
 
     def _handle_p2p_message(self, client: MiniMQTTClient, reply_topic: str, payload_str: str, router, target_manager):

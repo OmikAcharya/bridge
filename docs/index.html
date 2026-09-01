@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
     <meta name="theme-color" content="#09090b">
     <title>Prompt Bridge</title>
-    <script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
     <style>
         :root {
             --app-height: 100dvh;
@@ -1882,50 +1881,185 @@
             }
         }
 
+        // Native Zero-Dependency MQTT v3.1.1 WebSocket Client
+        class NanoMQTTWS {
+            constructor(brokers, clientId, onMessage, onConnect, onDisconnect) {
+                this.brokers = Array.isArray(brokers) ? brokers : [brokers];
+                this.brokerIdx = 0;
+                this.clientId = clientId;
+                this.onMessage = onMessage;
+                this.onConnect = onConnect;
+                this.onDisconnect = onDisconnect;
+                this.ws = null;
+                this.pingTimer = null;
+                this.enc = new TextEncoder();
+                this.dec = new TextDecoder();
+                this.connect();
+            }
+
+            connect() {
+                if (this.ws) {
+                    try { this.ws.close(); } catch(e) {}
+                    this.ws = null;
+                }
+                clearInterval(this.pingTimer);
+                const url = this.brokers[this.brokerIdx % this.brokers.length];
+                try {
+                    this.ws = new WebSocket(url, ['mqtt']);
+                    this.ws.binaryType = 'arraybuffer';
+                    this.ws.onopen = () => this._sendConnect();
+                    this.ws.onmessage = (e) => this._handleMessage(new Uint8Array(e.data));
+                    this.ws.onclose = () => {
+                        clearInterval(this.pingTimer);
+                        if (this.onDisconnect) this.onDisconnect();
+                        this.brokerIdx++;
+                        setTimeout(() => this.connect(), 2000);
+                    };
+                    this.ws.onerror = () => {
+                        try { this.ws.close(); } catch(e) {}
+                    };
+                } catch(e) {
+                    this.brokerIdx++;
+                    setTimeout(() => this.connect(), 2000);
+                }
+            }
+
+            _encodeLength(len) {
+                const bytes = [];
+                let num = len;
+                do {
+                    let byte = num % 128;
+                    num = Math.floor(num / 128);
+                    if (num > 0) byte |= 128;
+                    bytes.push(byte);
+                } while (num > 0);
+                return new Uint8Array(bytes);
+            }
+
+            _decodeLength(buf, offset) {
+                let multiplier = 1, value = 0, idx = offset;
+                while (idx < buf.length) {
+                    const byte = buf[idx++];
+                    value += (byte & 127) * multiplier;
+                    multiplier *= 128;
+                    if ((byte & 128) === 0) break;
+                }
+                return { length: value, nextOffset: idx };
+            }
+
+            _sendConnect() {
+                const cid = this.enc.encode(this.clientId);
+                const varHeader = new Uint8Array([0x00, 0x04, 0x4D, 0x51, 0x54, 0x54, 0x04, 0x02, 0x00, 0x3C]);
+                const payload = new Uint8Array(2 + cid.length);
+                payload[0] = (cid.length >> 8) & 0xff; payload[1] = cid.length & 0xff;
+                payload.set(cid, 2);
+                const remLen = varHeader.length + payload.length;
+                const lenBytes = this._encodeLength(remLen);
+                const pkt = new Uint8Array(1 + lenBytes.length + remLen);
+                pkt[0] = 0x10;
+                pkt.set(lenBytes, 1);
+                pkt.set(varHeader, 1 + lenBytes.length);
+                pkt.set(payload, 1 + lenBytes.length + varHeader.length);
+                this.ws.send(pkt);
+            }
+
+            subscribe(topic) {
+                if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+                const top = this.enc.encode(topic);
+                const payload = new Uint8Array(2 + 2 + top.length + 1);
+                payload[0] = 0x00; payload[1] = 0x01;
+                payload[2] = (top.length >> 8) & 0xff; payload[3] = top.length & 0xff;
+                payload.set(top, 4);
+                payload[4 + top.length] = 0x00;
+                const lenBytes = this._encodeLength(payload.length);
+                const pkt = new Uint8Array(1 + lenBytes.length + payload.length);
+                pkt[0] = 0x82;
+                pkt.set(lenBytes, 1);
+                pkt.set(payload, 1 + lenBytes.length);
+                this.ws.send(pkt);
+            }
+
+            publish(topic, payloadStr) {
+                if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+                const top = this.enc.encode(topic);
+                const pay = this.enc.encode(payloadStr);
+                const body = new Uint8Array(2 + top.length + pay.length);
+                body[0] = (top.length >> 8) & 0xff; body[1] = top.length & 0xff;
+                body.set(top, 2);
+                body.set(pay, 2 + top.length);
+                const lenBytes = this._encodeLength(body.length);
+                const pkt = new Uint8Array(1 + lenBytes.length + body.length);
+                pkt[0] = 0x30;
+                pkt.set(lenBytes, 1);
+                pkt.set(body, 1 + lenBytes.length);
+                this.ws.send(pkt);
+            }
+
+            _handleMessage(buf) {
+                const cmd = buf[0] & 0xf0;
+                if (cmd === 0x20) {
+                    clearInterval(this.pingTimer);
+                    this.pingTimer = setInterval(() => {
+                        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                            this.ws.send(new Uint8Array([0xC0, 0x00]));
+                        }
+                    }, 20000);
+                    if (this.onConnect) this.onConnect();
+                } else if (cmd === 0x30) {
+                    const { length: remLen, nextOffset: headerEnd } = this._decodeLength(buf, 1);
+                    const topLen = (buf[headerEnd] << 8) | buf[headerEnd + 1];
+                    const topic = this.dec.decode(buf.subarray(headerEnd + 2, headerEnd + 2 + topLen));
+                    const payload = this.dec.decode(buf.subarray(headerEnd + 2 + topLen, headerEnd + remLen));
+                    if (this.onMessage) this.onMessage(topic, payload);
+                }
+            }
+        }
+
         let p2pCrypto = null;
 
         function initP2PRelay(room, key) {
             updateConnectionBadge('p2p_connecting');
             try {
                 p2pCrypto = new E2EECryptoClient(key);
-                mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
-                    clientId: 'phone_' + Math.random().toString(16).slice(2, 10),
-                    clean: true,
-                    reconnectPeriod: 2000,
-                });
-
-                mqttClient.on('connect', () => {
-                    mqttClient.subscribe(`pb/${room}/phone`, { qos: 0 });
-                    isP2PReady = true;
-                    statusDot.classList.remove('offline');
-                    updateConnectionBadge('p2p');
-                    fetchTargets(true);
-                    fetchActivityTail();
-                });
-
-                mqttClient.on('message', async (topic, payload) => {
-                    try {
-                        const raw = JSON.parse(payload.toString());
-                        let data = raw;
-                        if (raw && raw.ct && raw.nonce && raw.tag && p2pCrypto) {
-                            const decryptedJson = await p2pCrypto.decrypt(raw);
-                            data = JSON.parse(decryptedJson);
-                        }
-                        if (data.id && pendingRequests.has(data.id)) {
-                            const { resolve } = pendingRequests.get(data.id);
-                            pendingRequests.delete(data.id);
-                            resolve(data);
-                        }
-                    } catch (err) {}
-                });
-
-                mqttClient.on('offline', () => {
-                    isP2PReady = false;
-                    statusDot.classList.add('offline');
-                    updateConnectionBadge('p2p_offline');
-                });
+                const brokers = [
+                    'wss://broker.hivemq.com:8884/mqtt',
+                    'wss://broker.emqx.io:8084/mqtt'
+                ];
+                const clientId = 'phone_' + Math.random().toString(16).slice(2, 10);
+                mqttClient = new NanoMQTTWS(
+                    brokers,
+                    clientId,
+                    async (topic, payload) => {
+                        try {
+                            const raw = JSON.parse(payload);
+                            let data = raw;
+                            if (raw && raw.ct && raw.nonce && raw.tag && p2pCrypto) {
+                                const decryptedJson = await p2pCrypto.decrypt(raw);
+                                data = JSON.parse(decryptedJson);
+                            }
+                            if (data.id && pendingRequests.has(data.id)) {
+                                const { resolve } = pendingRequests.get(data.id);
+                                pendingRequests.delete(data.id);
+                                resolve(data);
+                            }
+                        } catch (err) {}
+                    },
+                    () => {
+                        mqttClient.subscribe(`pb/${room}/phone`);
+                        isP2PReady = true;
+                        statusDot.classList.remove('offline');
+                        updateConnectionBadge('p2p');
+                        fetchTargets(true);
+                        fetchActivityTail();
+                    },
+                    () => {
+                        isP2PReady = false;
+                        statusDot.classList.add('offline');
+                        updateConnectionBadge('p2p_offline');
+                    }
+                );
             } catch (e) {
-                console.error('MQTT P2P error:', e);
+                console.error('P2P relay init error:', e);
             }
         }
 
