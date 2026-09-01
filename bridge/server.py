@@ -611,7 +611,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }
 
             if (resolved) {
-            if (resolved) {
                 let targetDisplay = resolved.name;
                 if (selectedTargetId === 'auto') {
                     targetDisplay = `${resolved.agent_name || resolved.name}`;
