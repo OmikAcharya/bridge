@@ -64,1141 +64,231 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
-    <meta name="theme-color" content="#09090b">
-    <title>Prompt Bridge</title>
+    <meta name="theme-color" content="#000000">
+    <title>Terminal Chat</title>
     <style>
         :root {
             --app-height: 100dvh;
-            --bg: #09090b;
-            --surface: #141417;
-            --surface-hover: #1c1c20;
-            --surface-active: #222228;
-            --surface-border: #27272a;
-            --surface-border-focus: #52525b;
-            --text-main: #f4f4f5;
+            --bg: #000;
+            --surface: #1c1c1e;
+            --text: #fff;
             --text-muted: #8e8e93;
-            --text-dim: #52525b;
-            --accent: #ffffff;
-            --accent-text: #09090b;
-            --green: #22c55e;
-            --green-glow: rgba(34, 197, 94, 0.35);
-            --yellow: #eab308;
-            --yellow-glow: rgba(234, 179, 8, 0.35);
-            --red: #ef4444;
-            --blue: #3b82f6;
-            --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            --blue: #0a84ff;
+            --blue-pressed: #0060c0;
+            --gray-bubble: #262628;
+            --border: #38383a;
+            --green: #30d158;
+            --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
             --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            -webkit-tap-highlight-color: transparent;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        
         html, body {
-            height: 100%;
-            height: var(--app-height, 100dvh);
-            max-height: var(--app-height, 100dvh);
-            overflow: hidden;
+            height: 100%; height: var(--app-height, 100dvh); max-height: var(--app-height, 100dvh);
+            overflow: hidden; font-family: var(--font-sans); background-color: var(--bg); color: var(--text);
         }
 
-        body {
-            font-family: var(--font-sans);
-            background-color: var(--bg);
-            color: var(--text-main);
-            display: flex;
-            flex-direction: column;
-            padding: calc(8px + env(safe-area-inset-top)) 14px calc(10px + env(safe-area-inset-bottom)) 14px;
-            transition: padding 0.15s ease;
+        /* Views */
+        .view {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            background: var(--bg);
+            transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
         }
+        #chatsView { z-index: 10; }
+        #chatView { z-index: 20; transform: translateX(100%); }
+        #chatView.active { transform: translateX(0); }
 
-        /* Header */
-        header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 2px 2px 8px 2px;
-            flex-shrink: 0;
-            transition: padding 0.15s ease;
+        /* Inbox View */
+        .inbox-header { padding: calc(env(safe-area-inset-top, 44px) + 20px) 20px 10px; display: flex; align-items: baseline; justify-content: space-between; }
+        .inbox-title { font-size: 34px; font-weight: 700; letter-spacing: 0.3px; }
+        .conn-badge { font-size: 13px; color: var(--blue); background: rgba(10, 132, 255, 0.15); padding: 4px 10px; border-radius: 12px; font-weight: 600; }
+        
+        .chats-list { flex-grow: 1; overflow-y: auto; padding: 0 20px; }
+        .chat-row { display: flex; align-items: center; padding: 12px 0; border-bottom: 0.5px solid var(--border); cursor: pointer; }
+        .chat-row:active { opacity: 0.7; }
+        .chat-row.active-row .avatar { border: 2px solid var(--blue); }
+        .avatar {
+            width: 45px; height: 45px; border-radius: 50%; background: #333;
+            display: flex; align-items: center; justify-content: center; font-size: 20px; margin-right: 12px;
+            position: relative; flex-shrink: 0;
         }
-
-        .title-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
         .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--green);
-            box-shadow: 0 0 8px var(--green-glow);
-            transition: background-color 0.2s, box-shadow 0.2s;
+            position: absolute; bottom: 0; right: 0; width: 12px; height: 12px;
+            border-radius: 50%; background: var(--green); border: 2px solid var(--bg);
+        }
+        .status-dot.offline { background: #ff453a; }
+        
+        .chat-info { flex-grow: 1; overflow: hidden; }
+        .chat-name { font-size: 17px; font-weight: 600; margin-bottom: 2px; }
+        .chat-preview { font-size: 15px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chevron { color: var(--border); font-size: 22px; padding-left: 10px; }
+
+        /* Chat View (Cockpit) */
+        .chat-nav {
+            padding: env(safe-area-inset-top, 44px) 10px 10px;
+            background: rgba(28, 28, 30, 0.85); backdrop-filter: blur(20px);
+            border-bottom: 0.5px solid var(--border); display: flex; align-items: center; justify-content: space-between;
+        }
+        .back-btn {
+            background: none; border: none; color: var(--blue); font-size: 17px; font-weight: 400;
+            display: flex; align-items: center; gap: 4px; cursor: pointer;
+        }
+        .back-btn svg { margin-bottom: 1px; }
+        
+        .contact-info { display: flex; flex-direction: column; align-items: center; justify-content: center; flex-grow: 1; margin-right: 30px; }
+        .contact-avatar { width: 28px; height: 28px; border-radius: 50%; background: #444; font-size: 14px; display: flex; align-items: center; justify-content: center; margin-bottom: 3px; }
+        .contact-name { font-size: 12px; font-weight: 600; }
+
+        .chat-scroll {
+            flex-grow: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px;
+        }
+        
+        /* Terminal Bubble (Gray Left) */
+        .bubble-row { display: flex; width: 100%; margin-bottom: 10px; }
+        .bubble-row.term-row { justify-content: flex-start; }
+        .bubble-row.user-row { justify-content: flex-end; }
+        
+        .bubble { max-width: 85%; padding: 10px 14px; position: relative; font-size: 15px; line-height: 1.4; word-wrap: break-word; }
+        
+        .bubble.terminal {
+            background: var(--gray-bubble); align-self: flex-start; border-radius: 18px 18px 18px 4px;
+            font-family: var(--font-mono); font-size: 13px; white-space: pre-wrap; overflow-x: auto;
+        }
+        
+        .bubble.user {
+            background: var(--blue); align-self: flex-end; border-radius: 18px 18px 4px 18px;
         }
 
-        .status-dot.offline {
-            background: var(--red);
-            box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+        /* Action Chips (replacing mini bar) */
+        .action-chips {
+            display: flex; gap: 8px; overflow-x: auto; padding: 8px 16px; padding-bottom: 4px;
+            scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
         }
-
-        .title {
-            font-size: 14px;
-            font-weight: 600;
-            letter-spacing: -0.01em;
-            color: var(--text-main);
-        }
-
-        .conn-badge {
-            font-family: var(--font-mono);
-            font-size: 9px;
-            font-weight: 600;
-            border-radius: 4px;
-            padding: 1px 5px;
-            letter-spacing: 0.02em;
-            display: inline-flex;
-            align-items: center;
-            gap: 3px;
-            transition: all 0.2s ease;
-        }
-
-        .conn-badge.p2p {
-            color: var(--green);
-            background: rgba(34, 197, 94, 0.12);
-            border: 1px solid rgba(34, 197, 94, 0.3);
-        }
-
-        .conn-badge.lan {
-            color: var(--yellow);
-            background: rgba(234, 179, 8, 0.12);
-            border: 1px solid rgba(234, 179, 8, 0.3);
-        }
-
-        .conn-badge.local {
-            color: var(--blue);
-            background: rgba(59, 130, 246, 0.12);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-        }
-
-        .header-actions {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .btn-icon-subtle {
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid var(--surface-border);
-            border-radius: 8px;
-            color: var(--text-muted);
-            padding: 5px 8px;
-            font-size: 11px;
-            font-family: var(--font-mono);
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s;
-        }
-
-        .btn-icon-subtle:active {
-            background: var(--surface-hover);
-            color: var(--text-main);
-        }
-
-        /* Bento Grid for Sessions */
-        .bento-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-            margin-bottom: 10px;
-            flex-shrink: 0;
-            transition: opacity 0.15s ease, max-height 0.2s ease, margin 0.15s ease;
-        }
-
-        .bento-tile {
-            background: var(--surface);
-            border: 1px solid var(--surface-border);
-            border-radius: 12px;
-            padding: 10px 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            cursor: pointer;
-            transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
-            position: relative;
-            user-select: none;
-        }
-
-        .bento-tile.active {
-            background: #1c1c22;
-            border-color: var(--text-main);
-            box-shadow: 0 0 12px rgba(255, 255, 255, 0.05);
-        }
-
-        .bento-tile:active {
-            transform: scale(0.98);
-        }
-
-        .bento-tile.full-width {
-            grid-column: span 2;
-        }
-
-        .tile-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 6px;
-        }
-
-        .tile-name-group {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            min-width: 0;
-        }
-
-        .tile-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--green);
-            flex-shrink: 0;
-        }
-
-        .tile-dot.busy {
-            background: var(--yellow);
-        }
-
-        .tile-dot.offline {
-            background: var(--red);
-        }
-
-        .tile-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-main);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .tile-badge {
-            font-family: var(--font-mono);
-            font-size: 9px;
-            font-weight: 600;
-            padding: 2px 5px;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.06);
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-            flex-shrink: 0;
-        }
-
-        .tile-path {
-            font-family: var(--font-mono);
-            font-size: 11px;
-            color: var(--text-muted);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .tile-cmd {
-            font-family: var(--font-mono);
-            font-size: 10px;
-            color: var(--text-dim);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        /* Keyboard Active Mini Session Bar */
-        .keyboard-mini-bar {
-            display: none;
-            background: var(--surface);
-            border: 1px solid var(--surface-border);
-            border-radius: 8px;
-            padding: 4px 10px;
-            margin-bottom: 6px;
-            font-size: 11px;
-            font-family: var(--font-mono);
-            color: var(--text-muted);
-            align-items: center;
-            justify-content: space-between;
-            flex-shrink: 0;
-        }
-
-        .keyboard-mini-bar .mini-target-name {
-            color: var(--text-main);
-            font-weight: 600;
-        }
-
-        /* Keyboard Open Layout Mode */
-        body.keyboard-active {
-            padding-top: calc(4px + env(safe-area-inset-top));
-            padding-bottom: 6px;
-        }
-
-        body.keyboard-active header {
-            padding-bottom: 4px;
-        }
-
-        body.keyboard-active .bento-grid {
-            display: none;
-        }
-
-        body.keyboard-active .keyboard-mini-bar {
-            display: flex;
-        }
-
-        body.keyboard-active .quick-actions-bar {
-            padding-top: 4px;
-            padding-bottom: 2px;
-        }
-
-        body.keyboard-active .controls {
-            margin-top: 4px;
-            gap: 4px;
-        }
-
-        body.keyboard-active .send-btn {
-            height: 48px;
-        }
-
-        body.keyboard-active .send-btn-title {
-            font-size: 14px;
-        }
-
-        /* Standalone Live Activity Banner */
-        .activity-banner-btn {
-            width: 100%;
-            background: var(--surface);
-            border: 1px solid var(--surface-border);
-            border-radius: 12px;
-            padding: 8px 12px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: pointer;
-            margin-bottom: 8px;
-            flex-shrink: 0;
-            user-select: none;
-            transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
-        }
-
-        .activity-banner-btn:active {
-            background: var(--surface-hover);
-            border-color: var(--surface-border-focus);
-            transform: scale(0.985);
-        }
-
-        .keyboard-active .activity-banner-btn {
-            display: none;
-        }
-
-        .banner-left {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            min-width: 0;
-        }
-
-        .banner-text-group {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            min-width: 0;
-        }
-
-        .banner-agent-name {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-main);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 160px;
-        }
-
-        .banner-status-tag {
-            font-size: 10px;
-            font-family: var(--font-mono);
-            color: var(--text-muted);
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--surface-border);
-            padding: 2px 6px;
-            border-radius: 4px;
-            white-space: nowrap;
-        }
-
-        .banner-right {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            color: var(--text-muted);
-            font-size: 11px;
-            font-family: var(--font-mono);
-            flex-shrink: 0;
-        }
-
-        .banner-arrow {
-            font-size: 11px;
-            color: var(--text-main);
-        }
-
-        /* Editor Area */
-        .editor-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            background: var(--surface);
-            border: 1px solid var(--surface-border);
-            border-radius: 12px;
-            overflow: hidden;
-            transition: border-color 0.15s ease;
-            min-height: 80px;
-        }
-
-        .editor-container:focus-within {
-            border-color: var(--surface-border-focus);
-        }
-
-        textarea {
-            flex: 1;
-            width: 100%;
-            background: transparent;
-            border: none;
-            outline: none;
-            color: var(--text-main);
-            font-family: var(--font-sans);
-            font-size: 17px;
-            line-height: 1.4;
-            padding: 12px 14px;
-            resize: none;
-            -webkit-appearance: none;
-        }
-
-        textarea::placeholder {
-            color: var(--text-dim);
-            font-weight: 400;
-        }
-
-        .editor-footer {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 5px 12px 6px 12px;
-            border-top: 1px solid rgba(255, 255, 255, 0.04);
-            font-size: 11px;
-            color: var(--text-muted);
-            font-family: var(--font-mono);
-            flex-shrink: 0;
-        }
-
-        .editor-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-family: var(--font-sans);
-        }
-
-        .btn-text {
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            padding: 2px 4px;
-        }
-
-        .btn-text:active {
-            color: var(--text-main);
-        }
-
-        /* Action Bar */
-        .quick-actions-bar {
-            display: flex;
-            gap: 6px;
-            overflow-x: auto;
-            scrollbar-width: none;
-            padding: 6px 0 4px 0;
-            flex-shrink: 0;
-        }
-
-        .quick-actions-bar::-webkit-scrollbar {
-            display: none;
-        }
-
+        .action-chips::-webkit-scrollbar { display: none; }
         .action-chip {
-            background: var(--surface);
-            border: 1px solid var(--surface-border);
-            border-radius: 8px;
-            padding: 6px 11px;
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--text-muted);
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.12s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: var(--font-sans);
+            background: var(--surface); color: var(--text); border: none; padding: 6px 14px;
+            border-radius: 16px; font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer;
         }
-
-        .action-chip:active {
-            background: var(--surface-hover);
-            color: var(--text-main);
-            transform: scale(0.96);
+        .action-chip:active { background: #333; }
+        .action-chip.danger { color: #ff453a; }
+        
+        /* Input Area */
+        .input-bar {
+            padding: 8px 16px calc(env(safe-area-inset-bottom, 16px) + 8px);
+            background: rgba(28, 28, 30, 0.85); backdrop-filter: blur(20px);
+            display: flex; align-items: flex-end; gap: 10px; border-top: 0.5px solid var(--border);
         }
-
-        .action-chip.danger:active {
-            background: rgba(239, 68, 68, 0.2);
-            color: var(--red);
-            border-color: var(--red);
+        .input-pill {
+            flex-grow: 1; background: #000; border: 1px solid var(--border);
+            border-radius: 20px; display: flex; align-items: flex-end; padding: 4px 6px;
         }
-
-        /* Controls & Enter Toggle */
-        .controls {
-            margin-top: 6px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            flex-shrink: 0;
+        .input-pill textarea {
+            flex-grow: 1; background: transparent; border: none; color: var(--text);
+            font-family: inherit; font-size: 16px; padding: 6px 10px; max-height: 120px;
+            resize: none; outline: none; line-height: 1.3;
         }
-
-        .options-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 4px;
-        }
-
-        .toggle-label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12px;
-            color: var(--text-muted);
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .toggle-switch {
-            position: relative;
-            width: 32px;
-            height: 18px;
-            background: #27272a;
-            border-radius: 10px;
-            transition: background 0.2s;
-            display: inline-block;
-        }
-
-        .toggle-switch::after {
-            content: '';
-            position: absolute;
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: white;
-            top: 2px;
-            left: 2px;
-            transition: transform 0.2s;
-        }
-
-        input[type="checkbox"] {
-            display: none;
-        }
-
-        input[type="checkbox"]:checked + .toggle-switch {
-            background: var(--blue);
-        }
-
-        input[type="checkbox"]:checked + .toggle-switch::after {
-            transform: translateX(14px);
-        }
-
         .send-btn {
-            width: 100%;
-            height: 52px;
-            border-radius: 12px;
-            border: none;
-            background: var(--accent);
-            color: var(--accent-text);
-            font-size: 15px;
-            font-weight: 600;
-            letter-spacing: -0.01em;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 1px;
-            transition: background 0.15s, transform 0.1s, opacity 0.15s;
-            box-shadow: 0 4px 14px rgba(255, 255, 255, 0.08);
+            width: 28px; height: 28px; border-radius: 50%; background: var(--blue);
+            display: flex; align-items: center; justify-content: center;
+            border: none; flex-shrink: 0; cursor: pointer; color: white; transition: transform 0.1s;
         }
-
-        .send-btn:active {
-            transform: scale(0.985);
-        }
-
-        .send-btn-title {
-            font-size: 15px;
-            font-weight: 600;
-        }
-
-        .send-btn-target {
-            font-size: 11px;
-            font-weight: 400;
-            font-family: var(--font-mono);
-            opacity: 0.7;
-        }
-
-        .send-btn.success {
-            background: var(--green);
-            color: white;
-            box-shadow: 0 4px 14px var(--green-glow);
-        }
-
-        .send-btn.error {
-            background: var(--red);
-            color: white;
-        }
-
-        .send-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .activity-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--green);
-            flex-shrink: 0;
-        }
-
-        .activity-dot.busy {
-            background: var(--blue);
-            animation: pulse 1.5s infinite;
-        }
-
-        /* Full Screen Activity Cockpit Modal */
-        .cockpit-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            height: 100dvh;
-            background: var(--bg);
-            z-index: 95;
-            display: flex;
-            flex-direction: column;
-            opacity: 0;
-            pointer-events: none;
-            transform: scale(0.99);
-            transition: opacity 0.15s ease, transform 0.15s ease;
-        }
-
-        .cockpit-modal.open {
-            opacity: 1;
-            pointer-events: auto;
-            transform: scale(1);
-        }
-
-        .cockpit-header {
-            height: 48px;
-            border-bottom: 1px solid var(--surface-border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 12px;
-            background: var(--surface);
-            flex-shrink: 0;
-        }
-
-        .cockpit-target-group {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            min-width: 0;
-        }
-
-        .cockpit-target-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-main);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 150px;
-        }
-
-        .cockpit-header-actions {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        /* Segmented Mode Pill */
-        .mode-segmented {
-            display: flex;
-            background: var(--bg);
-            border: 1px solid var(--surface-border);
-            border-radius: 6px;
-            padding: 2px;
-            gap: 2px;
-        }
-
-        .mode-pill {
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            font-size: 10px;
-            font-family: var(--font-mono);
-            font-weight: 500;
-            padding: 2px 7px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.12s ease;
-        }
-
-        .mode-pill.active {
-            background: var(--surface-hover);
-            color: var(--text-main);
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-        }
-
-        .btn-icon-micro {
-            background: var(--surface-hover);
-            border: 1px solid var(--surface-border);
-            color: var(--text-muted);
-            width: 26px;
-            height: 26px;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.12s ease;
-        }
-
-        .btn-icon-micro:active {
-            color: var(--text-main);
-            border-color: var(--surface-border-focus);
-        }
-
-        .cockpit-activity-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 14px;
-            font-size: 13px;
-            line-height: 1.55;
-            color: var(--text-main);
-            white-space: pre-wrap;
-            word-break: break-word;
-            -webkit-overflow-scrolling: touch;
-            background: var(--bg);
-        }
-
-        .cockpit-activity-content.raw-view {
-            font-family: var(--font-mono);
-            font-size: 11px;
-            color: var(--text-muted);
-            white-space: pre;
-            overflow-x: auto;
-        }
-
-        .activity-empty {
-            color: var(--text-dim);
-            font-size: 12px;
-            font-family: var(--font-mono);
-            font-style: italic;
-        }
-
-        /* Bottom Dictation Dialogue Bar */
-        .cockpit-bottom-dock {
-            background: var(--surface);
-            border-top: 1px solid var(--surface-border);
-            padding: 8px 12px calc(8px + env(safe-area-inset-bottom)) 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            flex-shrink: 0;
-        }
-
-        .cockpit-quick-chips {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            overflow-x: auto;
-            scrollbar-width: none;
-            padding-bottom: 2px;
-        }
-
-        .cockpit-quick-chips::-webkit-scrollbar {
-            display: none;
-        }
-
-        .chip-mini {
-            background: var(--surface-hover);
-            border: 1px solid var(--surface-border);
-            border-radius: 6px;
-            color: var(--text-muted);
-            font-size: 11px;
-            font-family: var(--font-sans);
-            font-weight: 500;
-            padding: 4px 9px;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.1s ease;
-        }
-
-        .chip-mini:active {
-            background: var(--surface-active);
-            color: var(--text-main);
-            transform: scale(0.96);
-        }
-
-        .chip-mini.danger {
-            color: #f87171;
-            border-color: rgba(239, 68, 68, 0.2);
-        }
-
-        .chip-mini.danger:active {
-            background: rgba(239, 68, 68, 0.15);
-        }
-
-        .cockpit-input-row {
-            display: flex;
-            align-items: flex-end;
-            gap: 8px;
-        }
-
-        #cockpitPrompt {
-            flex: 1;
-            min-height: 38px;
-            max-height: 90px;
-            resize: none;
-            background: var(--bg);
-            border: 1px solid var(--surface-border);
-            border-radius: 10px;
-            color: var(--text-main);
-            font-family: var(--font-sans);
-            font-size: 14px;
-            padding: 9px 12px;
-            line-height: 1.35;
-            outline: none;
-            transition: border-color 0.15s ease;
-        }
-
-        #cockpitPrompt:focus {
-            border-color: var(--surface-border-focus);
-        }
-
-        .cockpit-send-btn {
-            width: 38px;
-            height: 38px;
-            border-radius: 10px;
-            border: none;
-            background: var(--accent);
-            color: var(--accent-text);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            flex-shrink: 0;
-            transition: transform 0.1s ease, background 0.15s ease;
-        }
-
-        .cockpit-send-btn:active {
-            transform: scale(0.92);
-        }
-
-        .cockpit-send-btn.success {
-            background: var(--green);
-            color: white;
-        }
-
-        /* History Modal */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-end;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s ease;
-        }
-
-        .modal-overlay.open {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .bottom-sheet {
-            background: #141418;
-            border-top: 1px solid var(--surface-border-focus);
-            border-top-left-radius: 20px;
-            border-top-right-radius: 20px;
-            max-height: 80dvh;
-            display: flex;
-            flex-direction: column;
-            transform: translateY(100%);
-            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-            padding: 12px 16px calc(16px + env(safe-area-inset-bottom)) 16px;
-        }
-
-        .modal-overlay.open .bottom-sheet {
-            transform: translateY(0);
-        }
-
-        .sheet-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding-bottom: 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .sheet-title {
-            font-size: 15px;
-            font-weight: 600;
-        }
-
-        .sheet-close {
-            background: rgba(255, 255, 255, 0.06);
-            border: none;
-            color: var(--text-muted);
-            border-radius: 50%;
-            width: 28px;
-            height: 28px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-
-        .history-list {
-            overflow-y: auto;
-            padding: 10px 0;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .history-card {
-            background: var(--surface);
-            border: 1px solid var(--surface-border);
-            border-radius: 10px;
-            padding: 10px 12px;
-            cursor: pointer;
-            transition: background 0.15s;
-            font-size: 13px;
-            line-height: 1.4;
-            color: var(--text-main);
-        }
-
-        .history-card:active {
-            background: var(--surface-hover);
-        }
+        .send-btn:active { background: var(--blue-pressed); transform: scale(0.95); }
+        .send-btn:disabled { background: #333; color: #666; }
+        
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
-    <!-- Top Bar -->
-    <header>
-        <div class="title-group">
-            <div id="statusDot" class="status-dot"></div>
-            <span class="title">Prompt Bridge</span>
-            <div id="connBadge" class="conn-badge p2p" title="Connection Mode">🔒 P2P</div>
+    <!-- INBOX VIEW -->
+    <div id="chatsView" class="view">
+        <div class="inbox-header">
+            <div class="inbox-title">Messages</div>
+            <div id="connBadge" class="conn-badge">🔒 P2P</div>
         </div>
-        <div class="header-actions">
-            <button id="historyBtn" class="btn-icon-subtle" title="Prompt History">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                <span>History</span>
-            </button>
-            <button id="refreshBtn" class="btn-icon-subtle" title="Refresh Sessions">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="23 4 23 10 17 10"></polyline>
-                    <polyline points="1 20 1 14 7 14"></polyline>
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                </svg>
-            </button>
+        <div id="bentoGrid" class="chats-list">
+            <!-- Populated by renderBentoGrid() -->
+            <div style="padding: 20px; text-align:center; color: #666;">Connecting...</div>
         </div>
-    </header>
-
-    <!-- Bento Grid Sessions -->
-    <div id="bentoGrid" class="bento-grid">
-        <!-- Injected dynamically via JS -->
     </div>
 
-    <!-- Keyboard Open Mini Bar -->
-    <div id="keyboardMiniBar" class="keyboard-mini-bar">
-        <span>Target: <span id="miniTargetName" class="mini-target-name">Auto</span></span>
-        <span id="miniTargetPath">~/Developer/bridge</span>
-    </div>
-
-    <!-- Full-Screen Activity & Dictation Cockpit Modal -->
-    <div id="cockpitModal" class="cockpit-modal">
-        <!-- Cockpit Header -->
-        <div class="cockpit-header">
-            <div class="cockpit-target-group">
-                <div id="cockpitAgentDot" class="activity-dot"></div>
-                <span id="cockpitTargetTitle" class="cockpit-target-title">Terminal Monitor</span>
+    <!-- CHAT VIEW -->
+    <div id="chatView" class="view">
+        <div class="chat-nav">
+            <button class="back-btn" onclick="document.getElementById('chatView').classList.remove('active'); stopTail()">
+                <svg width="12" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                Messages
+            </button>
+            <div class="contact-info">
+                <div class="contact-avatar">💻</div>
+                <div id="cockpitTargetTitle" class="contact-name">Terminal</div>
             </div>
-            <div class="cockpit-header-actions">
-                <div class="mode-segmented">
-                    <button type="button" id="pillUltra" class="mode-pill active">Ultra</button>
-                    <button type="button" id="pillRaw" class="mode-pill">Raw</button>
+            <div style="width: 70px;"></div> <!-- spacer -->
+        </div>
+
+        <div class="chat-scroll" id="chatScroll">
+            <!-- Terminal Output Bubble -->
+            <div class="bubble-row term-row">
+                <div class="bubble terminal" id="cockpitActivityContent">
+                    Loading terminal...
                 </div>
-                <button id="refreshCockpitBtn" class="btn-icon-micro" title="Refresh Output">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="23 4 23 10 17 10"></polyline>
-                        <polyline points="1 20 1 14 7 14"></polyline>
-                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                    </svg>
-                </button>
-                <button id="closeCockpitBtn" class="btn-icon-micro" title="Close Log View">✕</button>
             </div>
         </div>
 
-        <!-- Scrollable Full-Height Activity / Log Content -->
-        <div id="cockpitActivityContent" class="cockpit-activity-content caveman-view">
-            <div class="activity-empty">Connecting to terminal session...</div>
+        <div class="action-chips" id="keyboardMiniBar">
+            <button class="action-chip" id="btnEnterOnly">Return ⏎</button>
+            <button class="action-chip danger" id="btnInterrupt">Ctrl+C</button>
+            <button class="action-chip" id="btnYes">Yes</button>
+            <button class="action-chip" id="btnNo">No</button>
+            <button class="action-chip" id="btnContinue">Continue</button>
         </div>
 
-        <!-- Thin Bottom Dictation Dialogue Bar -->
-        <div class="cockpit-bottom-dock">
-            <!-- Compact Quick Actions -->
-            <div class="cockpit-quick-chips">
-                <button id="cockpitBtnEnter" class="chip-mini" title="Send Return">↵ Return</button>
-                <button id="cockpitBtnContinue" class="chip-mini" title="Send continue">Continue</button>
-                <button id="cockpitBtnYes" class="chip-mini" title="Send 'y'">Yes</button>
-                <button id="cockpitBtnNo" class="chip-mini" title="Send 'n'">No</button>
-                <button id="cockpitBtnInterrupt" class="chip-mini danger" title="Send Ctrl+C">Ctrl+C</button>
-            </div>
-
-            <!-- Single/Multi-line Thin Dictation Input Row -->
-            <div class="cockpit-input-row">
-                <textarea 
-                    id="cockpitPrompt" 
-                    placeholder="Dictate prompt with Wispr Flow..." 
-                    rows="1" 
-                    autocomplete="off" 
-                    autocorrect="on" 
-                    spellcheck="true"
-                ></textarea>
-                <button id="cockpitSendBtn" class="cockpit-send-btn" title="Send to Agent">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                    </svg>
+        <div class="input-bar">
+            <div class="input-pill">
+                <textarea id="prompt" rows="1" placeholder="iMessage" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+                <button id="sendBtn" class="send-btn">
+                    <svg width="12" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
                 </button>
             </div>
         </div>
     </div>
+    
+    <!-- Dummy elements to keep original JS intact -->
+    <div id="statusDot" class="hidden"></div>
+    <div id="sendTitle" class="hidden"></div>
+    <div id="sendSubtitle" class="hidden"></div>
+    <div id="metrics" class="hidden"></div>
+    <div id="clearBtn" class="hidden"></div>
+    <div id="undoBtn" class="hidden"></div>
+    <div id="enterToggle" class="hidden"></div>
+    <div id="cockpitModal" class="hidden"></div>
+    <div id="openCockpitBtn" class="hidden"></div>
+    <div id="closeCockpitBtn" class="hidden"></div>
+    <div id="cockpitPrompt" class="hidden"></div>
+    <div id="cockpitSendBtn" class="hidden"></div>
+    <div id="cockpitAgentDot" class="hidden"></div>
+    <div id="headerAgentDot" class="hidden"></div>
+    <div id="headerAgentName" class="hidden"></div>
+    <div id="headerAgentStatus" class="hidden"></div>
+    <div id="historyBtn" class="hidden"></div>
+    <div id="refreshBtn" class="hidden"></div>
+    <div id="historyModal" class="hidden"></div>
+    <div id="historyList" class="hidden"></div>
+    <div id="closeHistoryModal" class="hidden"></div>
+    <div id="miniTargetName" class="hidden"></div>
+    <div id="miniTargetPath" class="hidden"></div>
+    <div id="pillRaw" class="hidden"></div>
+    <div id="pillUltra" class="hidden"></div>
+    <div id="cockpitBtnEnter" class="hidden"></div>
+    <div id="cockpitBtnInterrupt" class="hidden"></div>
+    <div id="cockpitBtnYes" class="hidden"></div>
+    <div id="cockpitBtnNo" class="hidden"></div>
+    <div id="cockpitBtnContinue" class="hidden"></div>
+    <div id="refreshCockpitBtn" class="hidden"></div>
 
-    <!-- Standalone Live Activity Banner (Matches Bento Card & Editor border radius and surface tokens) -->
-    <button id="openCockpitBtn" class="activity-banner-btn" title="Open Full Live Terminal Cockpit">
-        <div class="banner-left">
-            <div id="headerAgentDot" class="activity-dot"></div>
-            <div class="banner-text-group">
-                <span id="headerAgentName" class="banner-agent-name">Antigravity — bridge</span>
-                <span id="headerAgentStatus" class="banner-status-tag">Live Log ↗</span>
-            </div>
-        </div>
-        <div class="banner-right">
-            <span class="banner-hint">View Terminal</span>
-            <span class="banner-arrow">↗</span>
-        </div>
-    </button>
-
-    <!-- Editor -->
-    <div class="editor-container">
-        <textarea 
-            id="prompt" 
-            placeholder="Dictate with Wispr Flow or type..." 
-            autocomplete="off" 
-            autocorrect="on" 
-            spellcheck="true"
-        ></textarea>
-        <div class="editor-footer">
-            <span id="metrics">0 words · 0 chars</span>
-            <div class="editor-actions">
-                <button id="undoBtn" class="btn-text" style="display: none;">Undo</button>
-                <button id="clearBtn" class="btn-text">Clear</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Quick Action Bar -->
-    <div class="quick-actions-bar">
-        <button id="btnEnterOnly" class="action-chip" title="Send Return">
-            <span>Return ↵</span>
-        </button>
-        <button id="btnContinue" class="action-chip" title="Send continue">
-            <span>Continue</span>
-        </button>
-        <button id="btnYes" class="action-chip" title="Send 'y'">
-            <span>Yes</span>
-        </button>
-        <button id="btnNo" class="action-chip" title="Send 'n'">
-            <span>No</span>
-        </button>
-        <button id="btnInterrupt" class="action-chip danger" title="Send Ctrl+C">
-            <span>Ctrl+C</span>
-        </button>
-    </div>
-
-    <!-- Send Button & Enter Toggle -->
-    <div class="controls">
-        <div class="options-row">
-            <label class="toggle-label">
-                <input type="checkbox" id="enterToggle">
-                <span class="toggle-switch"></span>
-                <span>Press Enter on Mac</span>
-            </label>
-        </div>
-
-        <button id="sendBtn" class="send-btn">
-            <span id="sendTitle" class="send-btn-title">Send & Execute</span>
-            <span id="sendSubtitle" class="send-btn-target">to Active Agent</span>
-        </button>
-    </div>
-
-    <!-- History Bottom Sheet -->
-    <div id="historyModal" class="modal-overlay">
-        <div class="bottom-sheet">
-            <div class="sheet-header">
-                <span class="sheet-title">Recent Prompts</span>
-                <button id="closeHistoryModal" class="sheet-close">✕</button>
-            </div>
-            <div id="historyList" class="history-list">
-                <!-- Populated dynamically -->
-            </div>
-        </div>
-    </div>
-
-    <script>
+<script>
         const promptEl = document.getElementById('prompt');
         const sendBtn = document.getElementById('sendBtn');
         const sendTitle = document.getElementById('sendTitle');
@@ -1459,208 +549,56 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             return availableTargets.find(t => t.id === selectedTargetId) || null;
         }
 
+        
         function renderBentoGrid() {
             bentoGrid.innerHTML = '';
-
-            // 1. Auto Tile (Full width on top)
-            const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') || availableTargets[0];
-            const autoTile = document.createElement('div');
-            autoTile.className = `bento-tile full-width ${selectedTargetId === 'auto' ? 'active' : ''}`;
-            const resolvedName = autoResolved ? (autoResolved.agent_name || autoResolved.name) : 'Searching...';
-            const resolvedPath = autoResolved ? ((autoResolved.metadata && autoResolved.metadata.compact_cwd) || autoResolved.folder || '~') : '';
             
-            autoTile.innerHTML = `
-                <div class="tile-header">
-                    <div class="tile-name-group">
-                        <div class="tile-dot"></div>
-                        <span class="tile-title">Auto-detect Agent</span>
+            // Auto target
+            const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') || availableTargets[0];
+            if (autoResolved) {
+                const autoRow = document.createElement('div');
+                autoRow.className = 'chat-row';
+                autoRow.innerHTML = `
+                    <div class="avatar">✨</div>
+                    <div class="chat-info">
+                        <div class="chat-name">Auto-detect</div>
+                        <div class="chat-preview">Routing to ${autoResolved.agent_name || autoResolved.name}</div>
                     </div>
-                    <span class="tile-badge">AUTO</span>
-                </div>
-                <div class="tile-path">Routing to ${resolvedName}${resolvedPath ? ' (' + resolvedPath + ')' : ''}</div>
-            `;
-            autoTile.addEventListener('click', () => selectTarget('auto'));
-            bentoGrid.appendChild(autoTile);
-
-            // 2. Discovered Session Tiles
-            availableTargets.forEach(t => {
-                const tile = document.createElement('div');
-                const isSelected = (selectedTargetId === t.id);
-                tile.className = `bento-tile ${isSelected ? 'active' : ''}`;
-                const isBusy = (t.status === 'busy' || t.is_busy);
-                const dotClass = isBusy ? 'tile-dot busy' : 'tile-dot';
-                const compactPath = (t.metadata && t.metadata.compact_cwd) || t.folder || '~';
-                const ttyStr = t.tty ? t.tty.replace('/dev/', '') : '';
-                const shortName = t.agent_name || t.name;
-                const cmdStr = (t.metadata && t.metadata.short_cmd) || t.cmd || '';
-
-                if (t.id === 'focused') {
-                    tile.innerHTML = `
-                        <div class="tile-header">
-                            <div class="tile-name-group">
-                                <div class="tile-dot"></div>
-                                <span class="tile-title">Focused App</span>
-                            </div>
-                            <span class="tile-badge">MAC</span>
-                        </div>
-                        <div class="tile-path">Active Window</div>
-                    `;
-                } else {
-                    tile.innerHTML = `
-                        <div class="tile-header">
-                            <div class="tile-name-group">
-                                <div class="${dotClass}"></div>
-                                <span class="tile-title">${shortName}</span>
-                            </div>
-                            <span class="tile-badge">${ttyStr.toUpperCase()}</span>
-                        </div>
-                        <div class="tile-path">${compactPath}</div>
-                        ${cmdStr ? `<div class="tile-cmd">${cmdStr}</div>` : ''}
-                    `;
-                }
-                tile.addEventListener('click', () => selectTarget(t.id));
-                bentoGrid.appendChild(tile);
-            });
-
-            updateSendButtonLabel();
-        }
-
-        function updateSendButtonLabel() {
-            const resolved = getResolvedTarget();
-            const willEnter = enterToggle.checked;
-
-            if (selectedTargetId === 'focused') {
-                sendTitle.textContent = willEnter ? 'Paste & Enter on Mac' : 'Paste to Focused Window';
-                sendSubtitle.textContent = 'Active application on Mac';
-                miniTargetName.textContent = 'Focused App';
-                miniTargetPath.textContent = 'Active Window';
-                return;
-            }
-
-            if (resolved) {
-            if (resolved) {
-                let targetDisplay = resolved.name;
-                if (selectedTargetId === 'auto') {
-                    targetDisplay = `${resolved.agent_name || resolved.name}`;
-                }
-                sendTitle.textContent = 'Send Prompt';
-                sendSubtitle.textContent = `Route to ${targetDisplay}`;
-                miniTargetName.textContent = targetDisplay;
-                miniTargetPath.textContent = resolved.cwd || resolved.tty || '--';
-            } else {
-                sendTitle.textContent = 'Send Prompt';
-                sendSubtitle.textContent = 'No terminal target';
-                miniTargetName.textContent = 'Offline';
-                miniTargetPath.textContent = '--';
-            }
-        }
-
-        function updateActivityHeaderOptimistic() {
-            const resolved = getResolvedTarget();
-            if (resolved) {
-                const name = (selectedTargetId === 'auto' ? (resolved.agent_name || resolved.name) : resolved.name) || 'Live Log';
-                if (headerAgentName) headerAgentName.textContent = name;
-                if (cockpitTargetTitle) cockpitTargetTitle.textContent = name;
-                const isBusy = (resolved.status === 'busy' || resolved.is_busy);
-                if (isBusy) {
-                    headerAgentDot.classList.add('busy');
-                    cockpitAgentDot.classList.add('busy');
-                    if (headerAgentStatus) headerAgentStatus.textContent = 'Busy ↗';
-                } else {
-                    headerAgentDot.classList.remove('busy');
-                    cockpitAgentDot.classList.remove('busy');
-                    if (headerAgentStatus) headerAgentStatus.textContent = 'Live Log ↗';
-                }
-            }
-        }
-
-        function selectTarget(targetId) {
-            selectedTargetId = targetId;
-            localStorage.setItem('bridge_target_id', selectedTargetId);
-            haptic(15);
-            renderBentoGrid();
-            updateActivityHeaderOptimistic();
-            fetchActivityTail();
-        }
-
-        function openHistorySheet() {
-            historyList.innerHTML = '';
-            if (promptHistory.length === 0) {
-                historyList.innerHTML = `<div style="color:var(--text-dim); text-align:center; padding: 20px; font-family:var(--font-mono); font-size:12px;">No recent prompts</div>`;
-            } else {
-                promptHistory.forEach(text => {
-                    const card = document.createElement('div');
-                    card.className = 'history-card';
-                    card.textContent = text;
-                    card.addEventListener('click', () => {
-                        promptEl.value = text;
-                        updateMetrics();
-                        closeModal(historyModal);
-                        promptEl.focus();
-                        haptic(12);
-                    });
-                    historyList.appendChild(card);
+                    <div class="chevron">›</div>
+                `;
+                autoRow.addEventListener('click', () => {
+                    selectTarget('auto');
+                    document.getElementById('chatView').classList.add('active');
+                    startTail();
                 });
+                bentoGrid.appendChild(autoRow);
             }
-            openModal(historyModal);
+
+            availableTargets.forEach(t => {
+                const row = document.createElement('div');
+                row.className = 'chat-row';
+                const isBusy = (t.status === 'busy' || t.is_busy);
+                const dot = isBusy ? `<div class="status-dot"></div>` : '';
+                const compactPath = (t.metadata && t.metadata.compact_cwd) || t.folder || '~';
+                const shortName = t.agent_name || t.name;
+                
+                row.innerHTML = `
+                    <div class="avatar">💻${dot}</div>
+                    <div class="chat-info">
+                        <div class="chat-name">${t.id === 'focused' ? 'Focused App' : shortName}</div>
+                        <div class="chat-preview">${t.id === 'focused' ? (t.metadata?.window_title || 'Active Window') : compactPath}</div>
+                    </div>
+                    <div class="chevron">›</div>
+                `;
+                row.addEventListener('click', () => {
+                    selectTarget(t.id);
+                    document.getElementById('chatView').classList.add('active');
+                    startTail();
+                });
+                bentoGrid.appendChild(row);
+            });
         }
-
-        function openModal(el) {
-            el.classList.add('open');
-            haptic(10);
-        }
-
-        function closeModal(el) {
-            el.classList.remove('open');
-        }
-
-        historyBtn.addEventListener('click', openHistorySheet);
-        closeHistoryModal.addEventListener('click', () => closeModal(historyModal));
-        historyModal.addEventListener('click', (e) => { if (e.target === historyModal) closeModal(historyModal); });
-
-        async function fetchTargets(force = false) {
-            try {
-                let data = null;
-                if (isP2P) {
-                    data = await p2pRequest('get_targets');
-                } else {
-                    const res = await fetch('/targets', { cache: 'no-store' });
-                    if (!res.ok) throw new Error();
-                    data = await res.json();
-                }
-                availableTargets = data.targets || [];
-
-                const newSignature = JSON.stringify(availableTargets.map(t => [
-                    t.id, t.name, t.status, t.is_busy, t.cwd, t.cmd, t.tty
-                ]));
-
-                if (!force && newSignature === lastSignature) {
-                    updateSendButtonLabel();
-                    updateActivityHeaderOptimistic();
-                    return;
-                }
-
-                lastSignature = newSignature;
-                renderBentoGrid();
-                updateActivityHeaderOptimistic();
-            } catch (e) {
-                // Keep UI stable if offline
-            }
-        }
-
-        refreshBtn.addEventListener('click', async () => {
-            haptic(10);
-            refreshBtn.style.transform = 'rotate(180deg)';
-            refreshBtn.style.transition = 'transform 0.3s ease';
-            await fetchTargets(true);
-            setTimeout(() => {
-                refreshBtn.style.transform = 'none';
-                refreshBtn.style.transition = 'none';
-            }, 300);
-        });
-
-        // Core Send function
-        async function executePrompt(customText = null, action = null) {
+async function executePrompt(customText = null, action = null) {
             const text = (customText !== null) ? customText : promptEl.value.trim();
             if (!text && action === null) {
                 promptEl.focus();
@@ -1670,6 +608,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             haptic(20);
             const initialTitle = sendTitle.textContent;
             const initialSubtitle = sendSubtitle.textContent;
+
+            
+            if (resolvedAction !== 'interrupt') {
+                const scrollArea = document.getElementById('chatScroll');
+                const userRow = document.createElement('div');
+                userRow.className = 'bubble-row user-row';
+                userRow.innerHTML = `<div class="bubble user">${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`;
+                scrollArea.insertBefore(userRow, scrollArea.lastElementChild);
+                setTimeout(() => scrollArea.scrollTop = scrollArea.scrollHeight, 50);
+            }
 
             sendBtn.disabled = true;
             sendTitle.textContent = 'Sending...';
@@ -2176,7 +1124,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         setInterval(fetchActivityTail, 2500);
         updateMetrics();
     </script>
-</body>
 </html>
 """
 
