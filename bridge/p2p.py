@@ -25,10 +25,10 @@ logger = logging.getLogger("PromptBridge.P2P")
 
 DEFAULT_HOSTED_CLIENT_URL = os.environ.get("BRIDGE_CLIENT_URL", "https://omikacharya.github.io/bridge")
 DEFAULT_MQTT_BROKERS = [
-    ("broker.hivemq.com", 1883),
     ("broker.emqx.io", 1883),
+    ("broker.hivemq.com", 1883),
 ]
-DEFAULT_MQTT_BROKER = os.environ.get("BRIDGE_MQTT_BROKER", "broker.hivemq.com")
+DEFAULT_MQTT_BROKER = os.environ.get("BRIDGE_MQTT_BROKER", "broker.emqx.io")
 DEFAULT_MQTT_PORT = int(os.environ.get("BRIDGE_MQTT_PORT", "1883"))
 
 

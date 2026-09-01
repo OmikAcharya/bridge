@@ -1156,8 +1156,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             try {
                 p2pCrypto = new E2EECryptoClient(key);
                 const brokers = [
-                    'wss://broker.hivemq.com:8884/mqtt',
-                    'wss://broker.emqx.io:8084/mqtt'
+                    'wss://broker.emqx.io:8084/mqtt',
+                    'wss://broker.hivemq.com:8884/mqtt'
                 ];
                 const clientId = 'phone_' + Math.random().toString(16).slice(2, 10);
                 mqttClient = new NanoMQTTWS(
