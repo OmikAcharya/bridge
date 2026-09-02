@@ -250,29 +250,69 @@ class MiniMQTTClient:
         else:
             self.sock.sendall(pkt)
 
+    def _recv_exact(self, n: int) -> Optional[bytes]:
+        buf = bytearray()
+        while len(buf) < n:
+            try:
+                chunk = self.sock.recv(n - len(buf))
+                if not chunk:
+                    return None
+                buf.extend(chunk)
+            except (socket.timeout, TimeoutError):
+                return None
+        return bytes(buf)
+
     def _recv_raw_packet(self, timeout: float = 1.0) -> Optional[bytes]:
         if not self.sock:
             return None
         self.sock.settimeout(timeout)
         try:
             if self.is_ws:
-                head = self.sock.recv(2)
-                if not head or len(head) < 2:
-                    return None
-                rem = head[1] & 0x7F
-                if rem == 126:
-                    rem = struct.unpack(">H", self.sock.recv(2))[0]
-                elif rem == 127:
-                    rem = struct.unpack(">Q", self.sock.recv(8))[0]
-                buf = bytearray()
-                while len(buf) < rem:
-                    chunk = self.sock.recv(rem - len(buf))
-                    if not chunk:
-                        break
-                    buf.extend(chunk)
-                return bytes(buf)
+                while True:
+                    head = self._recv_exact(2)
+                    if not head:
+                        return None
+                    opcode = head[0] & 0x0F
+                    has_mask = bool(head[1] & 0x80)
+                    rem = head[1] & 0x7F
+                    if rem == 126:
+                        ext = self._recv_exact(2)
+                        if not ext:
+                            return None
+                        rem = struct.unpack(">H", ext)[0]
+                    elif rem == 127:
+                        ext = self._recv_exact(8)
+                        if not ext:
+                            return None
+                        rem = struct.unpack(">Q", ext)[0]
+
+                    mask = self._recv_exact(4) if has_mask else None
+                    if has_mask and not mask:
+                        return None
+
+                    payload = self._recv_exact(rem)
+                    if payload is None:
+                        return None
+                    if has_mask and mask:
+                        payload = bytes([b ^ mask[i % 4] for i, b in enumerate(payload)])
+
+                    # RFC 6455: reply to ping with pong
+                    if opcode == 0x9:
+                        mask_p = secrets.token_bytes(4)
+                        masked_b = bytes([b ^ mask_p[i % 4] for i, b in enumerate(payload)])
+                        self.sock.sendall(bytes([0x8A, 0x80 | len(payload)]) + mask_p + masked_b)
+                        continue
+                    elif opcode == 0x8:  # Close
+                        self.running = False
+                        return None
+                    elif opcode == 0xA:  # Pong
+                        continue
+                    elif opcode in (0x1, 0x2):  # Binary/Text MQTT packet
+                        return payload
+                    else:
+                        continue
             else:
-                head = self.sock.recv(1)
+                head = self._recv_exact(1)
                 if not head:
                     return None
                 cmd = head[0]
@@ -280,19 +320,19 @@ class MiniMQTTClient:
                 rem = 0
                 rem_bytes = bytearray()
                 while True:
-                    b = self.sock.recv(1)[0]
+                    b_bytes = self._recv_exact(1)
+                    if not b_bytes:
+                        return None
+                    b = b_bytes[0]
                     rem_bytes.append(b)
                     rem += (b & 127) * multiplier
                     multiplier *= 128
                     if (b & 128) == 0:
                         break
-                buf = bytearray()
-                while len(buf) < rem:
-                    chunk = self.sock.recv(rem - len(buf))
-                    if not chunk:
-                        break
-                    buf.extend(chunk)
-                return bytes([cmd]) + bytes(rem_bytes) + bytes(buf)
+                payload = self._recv_exact(rem)
+                if payload is None:
+                    return None
+                return bytes([cmd]) + bytes(rem_bytes) + payload
         except (socket.timeout, TimeoutError):
             return None
         except Exception:
