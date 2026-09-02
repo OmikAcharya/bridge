@@ -140,10 +140,11 @@ class TestPTYAdapter(unittest.TestCase):
         target = _make_target(tty=self.slave_name)
         result = self.adapter.send(target, "no enter", action="paste")
         self.assertTrue(result.success)
+        # Flush the canonical line buffer with Enter so cat outputs the echoed line
+        self.adapter.send(target, "", action="raw_enter")
         time.sleep(0.3)
         output = self._read_master()
         self.assertIn("no enter", output)
-        # paste should NOT append newline (the echo includes the text but cat won't produce a line)
 
     def test_send_raw_enter(self):
         target = _make_target(tty=self.slave_name)

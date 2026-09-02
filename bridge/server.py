@@ -1500,8 +1500,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         });
 
         let activityAbortController = null;
+        let isTailFetching = false;
 
         async function fetchActivityTail() {
+            if (isTailFetching) return;
+            isTailFetching = true;
+
             if (activityAbortController) {
                 activityAbortController.abort();
             }
@@ -1545,6 +1549,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 }
             } catch (e) {
                 if (e.name === 'AbortError') return;
+            } finally {
+                isTailFetching = false;
             }
         }
 
@@ -1811,7 +1817,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         closeHistoryModal.addEventListener('click', () => closeModal(historyModal));
         historyModal.addEventListener('click', (e) => { if (e.target === historyModal) closeModal(historyModal); });
 
+        let isTargetsFetching = false;
         async function fetchTargets(force = false) {
+            if (isTargetsFetching) return;
+            isTargetsFetching = true;
             try {
                 let data = null;
                 if (isP2P) {
@@ -1838,6 +1847,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 updateActivityHeaderOptimistic();
             } catch (e) {
                 // Keep UI stable if offline
+            } finally {
+                isTargetsFetching = false;
             }
         }
 
@@ -2402,7 +2413,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }
         }
 
-        async function p2pRequest(action, params = {}) {
+        async function p2pRequest(action, params = {}, timeoutMs = 15000) {
             if (!mqttClient || !isP2PReady || !p2pCrypto) {
                 throw new Error('P2P not connected');
             }
@@ -2416,7 +2427,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         pendingRequests.delete(id);
                         reject(new Error('P2P request timeout'));
                     }
-                }, 4500);
+                }, timeoutMs);
 
                 pendingRequests.set(id, {
                     resolve: (data) => {

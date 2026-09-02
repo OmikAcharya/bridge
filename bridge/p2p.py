@@ -504,7 +504,11 @@ class P2PManager:
                     msg = client.recv_message(timeout=1.0)
                     if msg:
                         _, payload_str = msg
-                        self._handle_p2p_message(client, topic_phone, payload_str, router, target_manager)
+                        threading.Thread(
+                            target=self._handle_p2p_message,
+                            args=(client, topic_phone, payload_str, router, target_manager),
+                            daemon=True
+                        ).start()
 
                     if time.time() - last_ping > 20:
                         client.ping()
