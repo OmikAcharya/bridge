@@ -1842,7 +1842,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     if (!res.ok) throw new Error();
                     data = await res.json();
                 }
-                if (data && data.targets) {
+                if (data && Array.isArray(data.targets)) {
                     availableTargets = data.targets;
                     try {
                         localStorage.setItem('bridge_targets_cache', JSON.stringify(availableTargets));
@@ -2477,11 +2477,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         // Initialize from local cache if available for instant chip rendering
         try {
-            const cached = localStorage.getItem('bridge_targets_cache');
-            if (cached) {
-                availableTargets = JSON.parse(cached);
-                renderBentoGrid();
-                updateActivityHeaderOptimistic();
+            const cachedTargets = localStorage.getItem('bridge_targets_cache');
+            if (cachedTargets) {
+                const parsed = JSON.parse(cachedTargets);
+                if (Array.isArray(parsed)) {
+                    availableTargets = parsed;
+                    renderBentoGrid();
+                    updateActivityHeaderOptimistic();
+                }
             }
         } catch (e) {}
 
