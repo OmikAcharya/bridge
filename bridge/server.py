@@ -340,56 +340,51 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             color: var(--text-main);
         }
 
-        /* Bento Grid for Sessions */
+        /* Session Chips Bar */
         .bento-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 3px 2px 7px 2px;
+            margin-bottom: 6px;
             flex-shrink: 0;
-            transition: opacity 0.15s ease, max-height 0.2s ease, margin 0.15s ease;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+
+        .bento-grid::-webkit-scrollbar {
+            display: none;
         }
 
         .bento-tile {
             background: var(--surface);
             border: 1px solid var(--surface-border);
-            border-radius: 12px;
-            padding: 10px 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
+            border-radius: 20px;
+            padding: 5px 12px;
+            display: inline-flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
             cursor: pointer;
             transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
             position: relative;
             user-select: none;
+            flex-shrink: 0;
+            white-space: nowrap;
+            height: 32px;
+            box-sizing: border-box;
         }
 
         .bento-tile.active {
             background: #1c1c22;
             border-color: var(--text-main);
-            box-shadow: 0 0 12px rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.08);
         }
 
         .bento-tile:active {
-            transform: scale(0.98);
-        }
-
-        .bento-tile.full-width {
-            grid-column: span 2;
-        }
-
-        .tile-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 6px;
-        }
-
-        .tile-name-group {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            min-width: 0;
+            transform: scale(0.96);
         }
 
         .tile-dot {
@@ -409,12 +404,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .tile-title {
-            font-size: 13px;
+            font-size: 12.5px;
             font-weight: 600;
             color: var(--text-main);
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
         .tile-badge {
@@ -430,43 +423,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             flex-shrink: 0;
         }
 
-        .tile-path {
-            font-family: var(--font-mono);
-            font-size: 11px;
-            color: var(--text-muted);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .tile-cmd {
-            font-family: var(--font-mono);
-            font-size: 10px;
-            color: var(--text-dim);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        /* Keyboard Active Mini Session Bar */
-        .keyboard-mini-bar {
-            display: none;
-            background: var(--surface);
-            border: 1px solid var(--surface-border);
-            border-radius: 8px;
-            padding: 4px 10px;
-            margin-bottom: 6px;
-            font-size: 11px;
-            font-family: var(--font-mono);
-            color: var(--text-muted);
-            align-items: center;
-            justify-content: space-between;
-            flex-shrink: 0;
-        }
-
-        .keyboard-mini-bar .mini-target-name {
+        .bento-tile.active .tile-badge {
+            background: rgba(255, 255, 255, 0.12);
             color: var(--text-main);
-            font-weight: 600;
+        }
+
+        .keyboard-mini-bar {
+            display: none !important;
         }
 
         /* Keyboard Open Layout Mode */
@@ -480,11 +443,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         body.keyboard-active .bento-grid {
-            display: none;
+            margin-bottom: 4px;
+            padding-bottom: 4px;
         }
 
         body.keyboard-active .keyboard-mini-bar {
-            display: flex;
+            display: none;
         }
 
         body.keyboard-active .quick-actions-bar {
@@ -1662,27 +1626,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         function renderBentoGrid() {
             bentoGrid.innerHTML = '';
 
-            // 1. Auto Tile (Full width on top)
+            // 1. Auto Chip (First chip)
             const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') || availableTargets[0];
             const autoTile = document.createElement('div');
-            autoTile.className = `bento-tile full-width ${selectedTargetId === 'auto' ? 'active' : ''}`;
+            autoTile.className = `bento-tile ${selectedTargetId === 'auto' ? 'active' : ''}`;
             const resolvedName = autoResolved ? (autoResolved.agent_name || autoResolved.name) : 'Searching...';
             const resolvedPath = autoResolved ? ((autoResolved.metadata && autoResolved.metadata.compact_cwd) || autoResolved.folder || '~') : '';
             
             autoTile.innerHTML = `
-                <div class="tile-header">
-                    <div class="tile-name-group">
-                        <div class="tile-dot"></div>
-                        <span class="tile-title">Auto-detect Agent</span>
-                    </div>
-                    <span class="tile-badge">AUTO</span>
-                </div>
-                <div class="tile-path">Routing to ${resolvedName}${resolvedPath ? ' (' + resolvedPath + ')' : ''}</div>
+                <div class="tile-dot"></div>
+                <span class="tile-title">Auto-detect</span>
+                <span class="tile-badge">AUTO</span>
             `;
+            autoTile.title = `Auto-route: ${resolvedName}${resolvedPath ? ' (' + resolvedPath + ')' : ''}`;
             autoTile.addEventListener('click', () => selectTarget('auto'));
             bentoGrid.appendChild(autoTile);
 
-            // 2. Discovered Session Tiles
+            // 2. Discovered Session Chips
             availableTargets.forEach(t => {
                 const tile = document.createElement('div');
                 const isSelected = (selectedTargetId === t.id);
@@ -1696,27 +1656,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
                 if (t.id === 'focused') {
                     tile.innerHTML = `
-                        <div class="tile-header">
-                            <div class="tile-name-group">
-                                <div class="tile-dot"></div>
-                                <span class="tile-title">Focused App</span>
-                            </div>
-                            <span class="tile-badge">MAC</span>
-                        </div>
-                        <div class="tile-path">Active Window</div>
+                        <div class="tile-dot"></div>
+                        <span class="tile-title">Focused App</span>
+                        <span class="tile-badge">MAC</span>
                     `;
+                    tile.title = 'Active Window on Mac';
                 } else {
                     tile.innerHTML = `
-                        <div class="tile-header">
-                            <div class="tile-name-group">
-                                <div class="${dotClass}"></div>
-                                <span class="tile-title">${shortName}</span>
-                            </div>
-                            <span class="tile-badge">${ttyStr.toUpperCase()}</span>
-                        </div>
-                        <div class="tile-path">${compactPath}</div>
-                        ${cmdStr ? `<div class="tile-cmd">${cmdStr}</div>` : ''}
+                        <div class="${dotClass}"></div>
+                        <span class="tile-title">${shortName}</span>
+                        ${ttyStr ? `<span class="tile-badge">${ttyStr.toUpperCase()}</span>` : ''}
                     `;
+                    tile.title = `${shortName} (${compactPath})${cmdStr ? ' · ' + cmdStr : ''}`;
                 }
                 tile.addEventListener('click', () => selectTarget(t.id));
                 bentoGrid.appendChild(tile);
@@ -1820,6 +1771,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let isTargetsFetching = false;
         async function fetchTargets(force = false) {
             if (isTargetsFetching) return;
+            if (isP2P && !isP2PReady) return;
             isTargetsFetching = true;
             try {
                 let data = null;
@@ -1830,7 +1782,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     if (!res.ok) throw new Error();
                     data = await res.json();
                 }
-                availableTargets = data.targets || [];
+                if (data && data.targets) {
+                    availableTargets = data.targets;
+                    try {
+                        localStorage.setItem('bridge_targets_cache', JSON.stringify(availableTargets));
+                    } catch (e) {}
+                }
 
                 const newSignature = JSON.stringify(availableTargets.map(t => [
                     t.id, t.name, t.status, t.is_busy, t.cwd, t.cmd, t.tty
@@ -2399,8 +2356,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         isP2PReady = true;
                         statusDot.classList.remove('offline');
                         updateConnectionBadge('p2p');
-                        fetchTargets(true);
-                        fetchActivityTail();
+                        setTimeout(() => {
+                            fetchTargets(true);
+                            fetchActivityTail();
+                        }, 150);
                     },
                     () => {
                         isP2PReady = false;
@@ -2455,13 +2414,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         window.addEventListener('focus', handleMobileWakeup);
         window.addEventListener('online', handleMobileWakeup);
 
-        // Initialize
+        // Initialize from local cache if available for instant chip rendering
+        try {
+            const cached = localStorage.getItem('bridge_targets_cache');
+            if (cached) {
+                availableTargets = JSON.parse(cached);
+                renderBentoGrid();
+                updateActivityHeaderOptimistic();
+            }
+        } catch (e) {}
+
         updateViewportHeight();
         if (isP2P && p2pRoom && p2pKey) {
             initP2PRelay(p2pRoom, p2pKey);
+        } else {
+            fetchTargets(true);
         }
         ping();
-        fetchTargets(true);
         fetchActivityTail();
         setInterval(ping, 4000);
         setInterval(() => fetchTargets(false), 5000);
