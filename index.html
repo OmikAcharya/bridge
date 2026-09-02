@@ -1781,7 +1781,7 @@
                     if (!res.ok) throw new Error();
                     data = await res.json();
                 }
-                if (data && data.targets) {
+                if (data && Array.isArray(data.targets)) {
                     availableTargets = data.targets;
                     try {
                         localStorage.setItem('bridge_targets_cache', JSON.stringify(availableTargets));
@@ -2418,9 +2418,12 @@
         try {
             const cachedTargets = localStorage.getItem('bridge_targets_cache');
             if (cachedTargets) {
-                availableTargets = JSON.parse(cachedTargets);
-                renderBentoGrid();
-                updateActivityHeaderOptimistic();
+                const parsed = JSON.parse(cachedTargets);
+                if (Array.isArray(parsed)) {
+                    availableTargets = parsed;
+                    renderBentoGrid();
+                    updateActivityHeaderOptimistic();
+                }
             }
         } catch (e) {}
 
