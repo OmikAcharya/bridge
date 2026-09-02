@@ -343,16 +343,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             color: var(--text-main);
         }
 
-        /* Bento Grid - Horizontal Scrolling Marquee of Session Cards */
+        /* Bento Grid for Sessions */
         .bento-grid {
-            display: flex;
-            align-items: stretch;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
             gap: 8px;
-            overflow-x: auto;
-            overflow-y: hidden;
-            padding: 2px 2px 6px 2px;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             flex-shrink: 0;
+            transition: opacity 0.15s ease, max-height 0.2s ease, margin 0.15s ease;
+            max-height: 240px;
+            overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
         }
@@ -365,29 +365,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             background: var(--surface);
             border: 1px solid var(--surface-border);
             border-radius: 12px;
-            padding: 8px 10px;
+            padding: 10px 12px;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            gap: 3px;
-            min-width: 138px;
-            max-width: 175px;
-            flex-shrink: 0;
+            gap: 4px;
             cursor: pointer;
             transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
             position: relative;
             user-select: none;
-            box-sizing: border-box;
         }
 
         .bento-tile.active {
             background: #1c1c22;
             border-color: var(--text-main);
-            box-shadow: 0 0 12px rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.05);
         }
 
         .bento-tile:active {
             transform: scale(0.98);
+        }
+
+        .bento-tile.full-width {
+            grid-column: span 2;
         }
 
         .tile-header {
@@ -397,25 +396,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             gap: 6px;
         }
 
-        .tile-title-group {
+        .tile-name-group {
             display: flex;
             align-items: center;
             gap: 6px;
-            overflow: hidden;
+            min-width: 0;
         }
 
         .tile-dot {
-            width: 7px;
-            height: 7px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
             background: var(--green);
-            box-shadow: 0 0 6px var(--green-glow);
             flex-shrink: 0;
         }
 
         .tile-dot.busy {
             background: var(--yellow);
-            box-shadow: 0 0 6px var(--yellow-glow);
         }
 
         .tile-dot.offline {
@@ -423,7 +420,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .tile-title {
-            font-size: 12.5px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--text-main);
             white-space: nowrap;
@@ -435,7 +432,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             font-family: var(--font-mono);
             font-size: 9px;
             font-weight: 600;
-            padding: 1.5px 5px;
+            padding: 2px 5px;
             border-radius: 4px;
             background: rgba(255, 255, 255, 0.06);
             color: var(--text-muted);
@@ -444,14 +441,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             flex-shrink: 0;
         }
 
-        .bento-tile.active .tile-badge {
-            background: rgba(255, 255, 255, 0.12);
-            color: var(--text-main);
-        }
-
         .tile-path {
-            font-size: 10.5px;
             font-family: var(--font-mono);
+            font-size: 11px;
             color: var(--text-muted);
             white-space: nowrap;
             overflow: hidden;
@@ -459,16 +451,33 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .tile-cmd {
-            font-size: 9.5px;
             font-family: var(--font-mono);
+            font-size: 10px;
             color: var(--text-dim);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
+        /* Keyboard Active Mini Session Bar */
         .keyboard-mini-bar {
-            display: none !important;
+            display: none;
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 8px;
+            padding: 4px 10px;
+            margin-bottom: 6px;
+            font-size: 11px;
+            font-family: var(--font-mono);
+            color: var(--text-muted);
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .keyboard-mini-bar .mini-target-name {
+            color: var(--text-main);
+            font-weight: 600;
         }
 
         /* Keyboard Open Layout Mode */
@@ -482,12 +491,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         body.keyboard-active .bento-grid {
-            margin-bottom: 4px;
-            padding-bottom: 4px;
+            display: none;
         }
 
         body.keyboard-active .keyboard-mini-bar {
-            display: none;
+            display: flex;
         }
 
         body.keyboard-active .quick-actions-bar {
@@ -1568,8 +1576,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 baseViewportHeight = currentH;
             }
 
-            // Grid collapses purely based on viewport height (e.g. keyboard presence or compact display)
-            const isHeightRestricted = (baseViewportHeight - currentH > 130) || (currentH < 500);
+            // Grid collapses purely when keyboard opens
+            const isHeightRestricted = (baseViewportHeight - currentH > 130);
 
             if (isHeightRestricted) {
                 document.body.classList.add('keyboard-active');
@@ -1665,29 +1673,27 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         function renderBentoGrid() {
             bentoGrid.innerHTML = '';
 
-            // 1. Auto Card (First card in marquee)
+            // 1. Auto Tile (Full width on top)
             const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') || availableTargets[0];
             const autoTile = document.createElement('div');
-            autoTile.className = `bento-tile ${selectedTargetId === 'auto' ? 'active' : ''}`;
+            autoTile.className = `bento-tile full-width ${selectedTargetId === 'auto' ? 'active' : ''}`;
             const resolvedName = autoResolved ? (autoResolved.agent_name || autoResolved.name) : 'Searching...';
             const resolvedPath = autoResolved ? ((autoResolved.metadata && autoResolved.metadata.compact_cwd) || autoResolved.folder || '~') : '';
             
             autoTile.innerHTML = `
                 <div class="tile-header">
-                    <div class="tile-title-group">
+                    <div class="tile-name-group">
                         <div class="tile-dot"></div>
-                        <span class="tile-title">Auto-detect</span>
+                        <span class="tile-title">Auto-detect Agent</span>
                     </div>
                     <span class="tile-badge">AUTO</span>
                 </div>
-                <div class="tile-path">Routing to ${resolvedName}</div>
-                <div class="tile-cmd">${resolvedPath || '~'}</div>
+                <div class="tile-path">Routing to ${resolvedName}${resolvedPath ? ' (' + resolvedPath + ')' : ''}</div>
             `;
-            autoTile.title = `Auto-route: ${resolvedName}${resolvedPath ? ' (' + resolvedPath + ')' : ''}`;
             autoTile.addEventListener('click', () => selectTarget('auto'));
             bentoGrid.appendChild(autoTile);
 
-            // 2. Discovered Session Cards in marquee
+            // 2. Discovered Session Tiles
             availableTargets.forEach(t => {
                 const tile = document.createElement('div');
                 const isSelected = (selectedTargetId === t.id);
@@ -1702,29 +1708,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 if (t.id === 'focused') {
                     tile.innerHTML = `
                         <div class="tile-header">
-                            <div class="tile-title-group">
+                            <div class="tile-name-group">
                                 <div class="tile-dot"></div>
                                 <span class="tile-title">Focused App</span>
                             </div>
                             <span class="tile-badge">MAC</span>
                         </div>
                         <div class="tile-path">Active Window</div>
-                        <div class="tile-cmd">macOS Frontmost</div>
                     `;
-                    tile.title = 'Active Window on Mac';
                 } else {
                     tile.innerHTML = `
                         <div class="tile-header">
-                            <div class="tile-title-group">
+                            <div class="tile-name-group">
                                 <div class="${dotClass}"></div>
                                 <span class="tile-title">${shortName}</span>
                             </div>
-                            ${ttyStr ? `<span class="tile-badge">${ttyStr.toUpperCase()}</span>` : ''}
+                            <span class="tile-badge">${ttyStr.toUpperCase()}</span>
                         </div>
                         <div class="tile-path">${compactPath}</div>
                         ${cmdStr ? `<div class="tile-cmd">${cmdStr}</div>` : ''}
                     `;
-                    tile.title = `${shortName} (${compactPath})${cmdStr ? ' · ' + cmdStr : ''}`;
                 }
                 tile.addEventListener('click', () => selectTarget(t.id));
                 bentoGrid.appendChild(tile);
