@@ -192,6 +192,15 @@ class SessionDiscovery:
 
             sanitized_procs = [redact_sensitive_cmd(p["cmd"]) for p in procs]
 
+            # Check for PTY proxy socket (enables focus-free PTYAdapter)
+            pty_sock_dir = os.environ.get("BRIDGE_PTY_SOCK_DIR", "/tmp")
+            pty_sock_path = os.path.join(pty_sock_dir, f"bridge_pty_{tty_short}.sock")
+            has_pty_sock = os.path.exists(pty_sock_path)
+
+            adapter_hint = "AppleTerminalAdapter" if app_name == "Terminal" else "ITermAdapter" if app_name == "iTerm" else "auto"
+            if has_pty_sock:
+                adapter_hint = "PTYAdapter"
+
             target = Target(
                 id=target_id,
                 name=name_label,
@@ -208,13 +217,14 @@ class SessionDiscovery:
                 cmd=raw_cmd,
                 win_idx=tab_info.get("win_idx"),
                 tab_idx=tab_info.get("tab_idx"),
-                adapter="AppleTerminalAdapter" if app_name == "Terminal" else "ITermAdapter" if app_name == "iTerm" else "auto",
+                adapter=adapter_hint,
                 metadata={
                     "tty_short": tty_short,
                     "compact_cwd": compact_cwd,
                     "win_name": win_title,
                     "short_cmd": short_cmd,
-                    "procs": sanitized_procs
+                    "procs": sanitized_procs,
+                    "pty_sock": pty_sock_path if has_pty_sock else None
                 }
             )
             targets.append(target)
