@@ -101,11 +101,12 @@ logger = logging.getLogger("PromptBridge.P2P")
 
 DEFAULT_HOSTED_CLIENT_URL = os.environ.get("BRIDGE_CLIENT_URL", "https://omikacharya.github.io/bridge")
 DEFAULT_MQTT_BROKERS = [
-    ("broker.emqx.io", 1883),
-    ("broker.hivemq.com", 1883),
+    ("public.cloud.shiftr.io", 443, True, "/mqtt", "public", "public"),
+    ("broker.hivemq.com", 1883, False, "", None, None),
+    ("broker.emqx.io", 1883, False, "", None, None),
 ]
-DEFAULT_MQTT_BROKER = os.environ.get("BRIDGE_MQTT_BROKER", "broker.emqx.io")
-DEFAULT_MQTT_PORT = int(os.environ.get("BRIDGE_MQTT_PORT", "1883"))
+DEFAULT_MQTT_BROKER = os.environ.get("BRIDGE_MQTT_BROKER", "public.cloud.shiftr.io")
+DEFAULT_MQTT_PORT = int(os.environ.get("BRIDGE_MQTT_PORT", "443"))
 
 
 class P2PCrypto:
@@ -152,11 +153,24 @@ class P2PCrypto:
 
 
 class MiniMQTTClient:
-    """Pure Python standard library MQTT v3.1.1 client."""
+    """Pure Python standard library MQTT v3.1.1 client supporting raw TCP and WSS."""
 
-    def __init__(self, host: str = DEFAULT_MQTT_BROKER, port: int = DEFAULT_MQTT_PORT, client_id: str = ""):
+    def __init__(
+        self,
+        host: str = DEFAULT_MQTT_BROKER,
+        port: int = DEFAULT_MQTT_PORT,
+        client_id: str = "",
+        is_ws: Optional[bool] = None,
+        path: str = "/mqtt",
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+    ):
         self.host = host
         self.port = port
+        self.is_ws = (port == 443) if is_ws is None else is_ws
+        self.path = path or "/mqtt"
+        self.username = username
+        self.password = password
         self.client_id = (client_id or f"mac_pb_{secrets.token_hex(4)}").encode("utf-8")
         self.sock: Optional[socket.socket] = None
         self.running = False
@@ -169,19 +183,120 @@ class MiniMQTTClient:
                     self.sock.close()
                 except Exception:
                     pass
-            self.sock = socket.create_connection((self.host, self.port), timeout=6)
+            raw_sock = socket.create_connection((self.host, self.port), timeout=6)
+            if self.is_ws:
+                import ssl
+                ctx = ssl.create_default_context()
+                self.sock = ctx.wrap_socket(raw_sock, server_hostname=self.host)
+                req = (
+                    f"GET {self.path} HTTP/1.1\r\n"
+                    f"Host: {self.host}\r\n"
+                    f"Upgrade: websocket\r\n"
+                    f"Connection: Upgrade\r\n"
+                    f"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                    f"Sec-WebSocket-Version: 13\r\n"
+                    f"Sec-WebSocket-Protocol: mqtt\r\n\r\n"
+                )
+                self.sock.sendall(req.encode())
+                resp = self.sock.recv(1024)
+                if b"101 Switching Protocols" not in resp:
+                    raise ConnectionError(f"WS handshake failed on {self.host}")
+            else:
+                self.sock = raw_sock
+
             cid = self.client_id
-            payload = bytes([0x00, 0x04, ord('M'), ord('Q'), ord('T'), ord('T'), 0x04, 0x02, 0x00, 0x3C, 0x00, len(cid)]) + cid
+            uname = self.username.encode("utf-8") if self.username else None
+            pword = self.password.encode("utf-8") if self.password else None
+            flags = 0xC2 if (uname and pword) else 0x02
+
+            payload = struct.pack(">H", len(cid)) + cid
+            if uname:
+                payload += struct.pack(">H", len(uname)) + uname
+            if pword:
+                payload += struct.pack(">H", len(pword)) + pword
+
+            var_header = b"\x00\x04MQTT\x04" + bytes([flags]) + b"\x00\x3c"
+            rem = len(var_header) + len(payload)
             pkt = bytearray([0x10])
-            rem = len(payload)
-            pkt.append(rem)
-            pkt.extend(payload)
-            self.sock.sendall(pkt)
-            resp = self.sock.recv(4)
-            if len(resp) < 4 or resp[0] != 0x20 or resp[3] != 0x00:
-                raise ConnectionError(f"MQTT Connack rejected: {list(resp)}")
+            while True:
+                b = rem % 128
+                rem //= 128
+                if rem > 0:
+                    b |= 128
+                pkt.append(b)
+                if rem <= 0:
+                    break
+            pkt.extend(var_header + payload)
+
+            self._send_raw(pkt)
+            resp = self._recv_raw_packet(timeout=5.0)
+            if not resp or resp[0] != 0x20 or resp[3] != 0x00:
+                raise ConnectionError(f"MQTT Connack rejected: {list(resp) if resp else 'None'}")
             self.running = True
             return True
+
+    def _send_raw(self, pkt: bytes):
+        if self.is_ws:
+            mask = secrets.token_bytes(4)
+            masked = bytes([b ^ mask[i % 4] for i, b in enumerate(pkt)])
+            rem = len(pkt)
+            if rem < 126:
+                h = bytes([0x82, 0x80 | rem])
+            elif rem < 65536:
+                h = bytes([0x82, 0x80 | 126]) + struct.pack(">H", rem)
+            else:
+                h = bytes([0x82, 0x80 | 127]) + struct.pack(">Q", rem)
+            self.sock.sendall(h + mask + masked)
+        else:
+            self.sock.sendall(pkt)
+
+    def _recv_raw_packet(self, timeout: float = 1.0) -> Optional[bytes]:
+        if not self.sock:
+            return None
+        self.sock.settimeout(timeout)
+        try:
+            if self.is_ws:
+                head = self.sock.recv(2)
+                if not head or len(head) < 2:
+                    return None
+                rem = head[1] & 0x7F
+                if rem == 126:
+                    rem = struct.unpack(">H", self.sock.recv(2))[0]
+                elif rem == 127:
+                    rem = struct.unpack(">Q", self.sock.recv(8))[0]
+                buf = bytearray()
+                while len(buf) < rem:
+                    chunk = self.sock.recv(rem - len(buf))
+                    if not chunk:
+                        break
+                    buf.extend(chunk)
+                return bytes(buf)
+            else:
+                head = self.sock.recv(1)
+                if not head:
+                    return None
+                cmd = head[0]
+                multiplier = 1
+                rem = 0
+                rem_bytes = bytearray()
+                while True:
+                    b = self.sock.recv(1)[0]
+                    rem_bytes.append(b)
+                    rem += (b & 127) * multiplier
+                    multiplier *= 128
+                    if (b & 128) == 0:
+                        break
+                buf = bytearray()
+                while len(buf) < rem:
+                    chunk = self.sock.recv(rem - len(buf))
+                    if not chunk:
+                        break
+                    buf.extend(chunk)
+                return bytes([cmd]) + bytes(rem_bytes) + bytes(buf)
+        except (socket.timeout, TimeoutError):
+            return None
+        except Exception:
+            return None
 
     def subscribe(self, topic: str):
         with self._lock:
@@ -191,8 +306,8 @@ class MiniMQTTClient:
             msg_id = 1
             payload = struct.pack(">H", msg_id) + struct.pack(">H", len(top_b)) + top_b + b"\x00"
             pkt = bytearray([0x82, len(payload)]) + payload
-            self.sock.sendall(pkt)
-            self.sock.recv(5)
+            self._send_raw(pkt)
+            self._recv_raw_packet(timeout=5.0)
 
     def publish(self, topic: str, payload_str: str):
         with self._lock:
@@ -203,66 +318,53 @@ class MiniMQTTClient:
             var_header = struct.pack(">H", len(top_b)) + top_b
             body = var_header + pay_b
             rem = len(body)
-            pkt = bytearray([0x30]) # PUBLISH QoS 0
+            pkt = bytearray([0x30])  # PUBLISH QoS 0
             while True:
-                encoded_byte = rem % 128
+                b = rem % 128
                 rem //= 128
                 if rem > 0:
-                    encoded_byte |= 128
-                pkt.append(encoded_byte)
+                    b |= 128
+                pkt.append(b)
                 if rem <= 0:
                     break
             pkt.extend(body)
-            self.sock.sendall(pkt)
+            self._send_raw(pkt)
 
     def ping(self):
         with self._lock:
             if self.sock:
                 try:
-                    self.sock.sendall(b"\xC0\x00")
+                    self._send_raw(b"\xC0\x00")
                 except Exception:
                     pass
 
     def recv_message(self, timeout: float = 1.0) -> Optional[Tuple[str, str]]:
-        if not self.sock:
+        pkt = self._recv_raw_packet(timeout=timeout)
+        if not pkt or (pkt[0] & 0xF0) != 0x30:
             return None
-        self.sock.settimeout(timeout)
-        try:
-            head = self.sock.recv(1)
-            if not head:
-                return None
-            cmd = head[0]
-            multiplier = 1
-            value = 0
-            while True:
-                encoded_byte = self.sock.recv(1)[0]
-                value += (encoded_byte & 127) * multiplier
-                multiplier *= 128
-                if (encoded_byte & 128) == 0:
-                    break
-            data = b""
-            while len(data) < value:
-                chunk = self.sock.recv(value - len(data))
-                if not chunk:
-                    break
-                data += chunk
-            if (cmd & 0xF0) == 0x30: # PUBLISH
-                top_len = struct.unpack(">H", data[:2])[0]
-                topic = data[2:2+top_len].decode("utf-8")
-                payload = data[2+top_len:].decode("utf-8", errors="ignore")
-                return topic, payload
-        except (socket.timeout, TimeoutError):
-            return None
-        except Exception:
-            return None
-        return None
+        idx = 1
+        multiplier = 1
+        rem_len = 0
+        while True:
+            b = pkt[idx]
+            idx += 1
+            rem_len += (b & 127) * multiplier
+            multiplier *= 128
+            if (b & 128) == 0:
+                break
+        top_len = struct.unpack(">H", pkt[idx:idx+2])[0]
+        idx += 2
+        topic = pkt[idx:idx+top_len].decode("utf-8", errors="ignore")
+        idx += top_len
+        payload = pkt[idx:].decode("utf-8", errors="ignore")
+        return topic, payload
 
     def close(self):
         self.running = False
         with self._lock:
             if self.sock:
                 try:
-                    self.sock.sendall(b"\xE0\x00") # DISCONNECT
+                    self._send_raw(b"\xE0\x00")  # DISCONNECT
                     self.sock.close()
                 except Exception:
                     pass
@@ -375,9 +477,23 @@ class P2PManager:
         broker_idx = 0
 
         while self.running:
-            host, port = DEFAULT_MQTT_BROKERS[broker_idx % len(DEFAULT_MQTT_BROKERS)]
+            entry = DEFAULT_MQTT_BROKERS[broker_idx % len(DEFAULT_MQTT_BROKERS)]
+            if len(entry) >= 6:
+                host, port, is_ws, path, uname, pword = entry[:6]
+            else:
+                host, port = entry[:2]
+                is_ws, path, uname, pword = (port == 443), "/mqtt", None, None
+
             try:
-                client = MiniMQTTClient(host=host, port=port, client_id=f"pb_mac_{self.room_id}")
+                client = MiniMQTTClient(
+                    host=host,
+                    port=port,
+                    is_ws=is_ws,
+                    path=path,
+                    username=uname,
+                    password=pword,
+                    client_id=f"pb_mac_{self.room_id}"
+                )
                 client.connect()
                 client.subscribe(topic_mac)
                 self.relay_client = client

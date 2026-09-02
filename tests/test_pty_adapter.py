@@ -98,11 +98,22 @@ class TestPTYAdapter(unittest.TestCase):
         except OSError:
             pass
 
-    def _read_master(self, timeout=1.0):
+    def _read_master(self, timeout=1.5):
         import select
-        if select.select([self.master_fd], [], [], timeout)[0]:
-            return os.read(self.master_fd, 8192).decode(errors="replace")
-        return ""
+        deadline = time.time() + timeout
+        buf = ""
+        while time.time() < deadline:
+            rem = max(0.05, deadline - time.time())
+            r, _, _ = select.select([self.master_fd], [], [], rem)
+            if r:
+                try:
+                    chunk = os.read(self.master_fd, 8192).decode(errors="replace")
+                    buf += chunk
+                    if buf:
+                        return buf
+                except OSError:
+                    break
+        return buf
 
     def test_can_handle_with_socket(self):
         target = _make_target(tty=self.slave_name)

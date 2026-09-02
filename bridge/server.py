@@ -2217,7 +2217,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     this.ws = null;
                 }
                 clearInterval(this.pingTimer);
-                const url = this.brokers[this.brokerIdx % this.brokers.length];
+                const item = this.brokers[this.brokerIdx % this.brokers.length];
+                const url = typeof item === 'string' ? item : item.url;
+                this.username = (typeof item === 'object' && item.username) ? item.username : null;
+                this.password = (typeof item === 'object' && item.password) ? item.password : null;
+
                 try {
                     this.ws = new WebSocket(url, ['mqtt']);
                     this.ws.binaryType = 'arraybuffer';
@@ -2263,10 +2267,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
             _sendConnect() {
                 const cid = this.enc.encode(this.clientId);
-                const varHeader = new Uint8Array([0x00, 0x04, 0x4D, 0x51, 0x54, 0x54, 0x04, 0x02, 0x00, 0x3C]);
-                const payload = new Uint8Array(2 + cid.length);
-                payload[0] = (cid.length >> 8) & 0xff; payload[1] = cid.length & 0xff;
-                payload.set(cid, 2);
+                const uname = this.username ? this.enc.encode(this.username) : null;
+                const pword = this.password ? this.enc.encode(this.password) : null;
+                const flags = (uname && pword) ? 0xC2 : 0x02;
+
+                const varHeader = new Uint8Array([0x00, 0x04, 0x4D, 0x51, 0x54, 0x54, 0x04, flags, 0x00, 0x3C]);
+                let payloadLen = 2 + cid.length;
+                if (uname) payloadLen += 2 + uname.length;
+                if (pword) payloadLen += 2 + pword.length;
+
+                const payload = new Uint8Array(payloadLen);
+                let off = 0;
+                payload[off++] = (cid.length >> 8) & 0xff; payload[off++] = cid.length & 0xff;
+                payload.set(cid, off); off += cid.length;
+
+                if (uname) {
+                    payload[off++] = (uname.length >> 8) & 0xff; payload[off++] = uname.length & 0xff;
+                    payload.set(uname, off); off += uname.length;
+                }
+                if (pword) {
+                    payload[off++] = (pword.length >> 8) & 0xff; payload[off++] = pword.length & 0xff;
+                    payload.set(pword, off); off += pword.length;
+                }
+
                 const remLen = varHeader.length + payload.length;
                 const lenBytes = this._encodeLength(remLen);
                 const pkt = new Uint8Array(1 + lenBytes.length + remLen);
@@ -2336,8 +2359,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             try {
                 p2pCrypto = new E2EECryptoClient(key);
                 const brokers = [
-                    'wss://broker.emqx.io:8084/mqtt',
-                    'wss://broker.hivemq.com:8884/mqtt'
+                    { url: 'wss://public.cloud.shiftr.io:443/mqtt', username: 'public', password: 'public' },
+                    'wss://broker.hivemq.com:8884/mqtt',
+                    'wss://broker.emqx.io:8084/mqtt'
                 ];
                 const clientId = 'phone_' + Math.random().toString(16).slice(2, 10);
                 mqttClient = new NanoMQTTWS(
