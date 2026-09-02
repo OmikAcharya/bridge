@@ -64,6 +64,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <meta name="theme-color" content="#09090b">
     <title>Prompt Bridge</title>
     <style>
@@ -348,6 +351,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             margin-bottom: 10px;
             flex-shrink: 0;
             transition: opacity 0.15s ease, max-height 0.2s ease, margin 0.15s ease;
+            max-height: 240px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+
+        .bento-grid::-webkit-scrollbar {
+            display: none;
         }
 
         .bento-tile {
@@ -1565,8 +1576,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 baseViewportHeight = currentH;
             }
 
-            // Grid collapses purely based on viewport height (e.g. keyboard presence or compact display)
-            const isHeightRestricted = (baseViewportHeight - currentH > 130) || (currentH < 500);
+            // Grid collapses purely when keyboard opens
+            const isHeightRestricted = (baseViewportHeight - currentH > 130);
 
             if (isHeightRestricted) {
                 document.body.classList.add('keyboard-active');
@@ -1820,6 +1831,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let isTargetsFetching = false;
         async function fetchTargets(force = false) {
             if (isTargetsFetching) return;
+            if (isP2P && !isP2PReady) return;
             isTargetsFetching = true;
             try {
                 let data = null;
@@ -1830,7 +1842,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     if (!res.ok) throw new Error();
                     data = await res.json();
                 }
-                availableTargets = data.targets || [];
+                if (data && Array.isArray(data.targets)) {
+                    availableTargets = data.targets;
+                    try {
+                        localStorage.setItem('bridge_targets_cache', JSON.stringify(availableTargets));
+                    } catch (e) {}
+                }
 
                 const newSignature = JSON.stringify(availableTargets.map(t => [
                     t.id, t.name, t.status, t.is_busy, t.cwd, t.cmd, t.tty
@@ -2019,9 +2036,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         // Connection Security & Mode Indicator
         const connBadge = document.getElementById('connBadge');
+        const urlParams = new URLSearchParams(window.location.search);
         const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
-        const p2pRoom = hashParams.get('room');
-        const p2pKey = hashParams.get('key');
+        const p2pRoom = hashParams.get('room') || urlParams.get('room');
+        const p2pKey = hashParams.get('key') || urlParams.get('key');
         const isP2P = Boolean(p2pRoom) || window.location.hostname.includes('github.io');
 
         let mqttClient = null;
@@ -2399,8 +2417,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         isP2PReady = true;
                         statusDot.classList.remove('offline');
                         updateConnectionBadge('p2p');
-                        fetchTargets(true);
-                        fetchActivityTail();
+                        setTimeout(() => {
+                            fetchTargets(true);
+                            fetchActivityTail();
+                        }, 150);
                     },
                     () => {
                         isP2PReady = false;
@@ -2455,13 +2475,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         window.addEventListener('focus', handleMobileWakeup);
         window.addEventListener('online', handleMobileWakeup);
 
-        // Initialize
+        // Initialize from local cache if available for instant chip rendering
+        try {
+            const cachedTargets = localStorage.getItem('bridge_targets_cache');
+            if (cachedTargets) {
+                const parsed = JSON.parse(cachedTargets);
+                if (Array.isArray(parsed)) {
+                    availableTargets = parsed;
+                    renderBentoGrid();
+                    updateActivityHeaderOptimistic();
+                }
+            }
+        } catch (e) {}
+
         updateViewportHeight();
         if (isP2P && p2pRoom && p2pKey) {
             initP2PRelay(p2pRoom, p2pKey);
+        } else {
+            fetchTargets(true);
         }
         ping();
-        fetchTargets(true);
         fetchActivityTail();
         setInterval(ping, 4000);
         setInterval(() => fetchTargets(false), 5000);

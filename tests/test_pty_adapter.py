@@ -72,10 +72,12 @@ class TestPTYAdapter(unittest.TestCase):
                     r, _, _ = __import__("select").select([self.srv], [], [], 0.1)
                     if r:
                         conn, _ = self.srv.accept()
-                        data = conn.recv(65536)
-                        if data:
-                            os.write(self.master_fd, data)
-                        conn.close()
+                        try:
+                            data = conn.recv(65536)
+                            if data:
+                                os.write(self.master_fd, data)
+                        finally:
+                            conn.close()
                 except Exception:
                     break
 
