@@ -429,7 +429,8 @@ class P2PManager:
 
     def generate_p2p_url(self) -> str:
         """Constructs secure P2P pairing URL pointing to the hosted static web client."""
-        return f"{self.client_url}/#p2p=1&room={self.room_id}&key={self.auth_key}"
+        ts = int(time.time())
+        return f"{self.client_url}/?v={ts}#p2p=1&room={self.room_id}&key={self.auth_key}"
 
     def generate_lan_url(self, lan_ip: str, port: int) -> str:
         """Constructs direct local LAN URL when --expose-lan is explicitly enabled."""
@@ -582,6 +583,7 @@ class P2PManager:
 
             req_id = req.get("id")
             action = req.get("action")
+            logger.info("Incoming P2P request: action='%s' id=%s", action, req_id)
 
             response_payload = None
 
@@ -600,6 +602,7 @@ class P2PManager:
                     if t.agent in ("claude", "codex", "opencode", "aider", "agy") and t.id != "focused":
                         default_t = t.id
                         break
+                logger.info("Handled P2P get_targets: responding with %d targets", len(targets_dict))
                 response_payload = {
                     "id": req_id,
                     "action": "targets_response",
