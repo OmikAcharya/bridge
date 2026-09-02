@@ -2,7 +2,7 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [direct-p2p-upgrade, fix-p2p-terminal-chips]
+    branches: [direct-p2p-upgrade]
 
 jobs:
   deploy:
