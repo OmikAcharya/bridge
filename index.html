@@ -2091,6 +2091,7 @@
                 const macInput = new Uint8Array(nonce.length + ct.length);
                 macInput.set(nonce, 0);
                 macInput.set(ct, nonce.length);
+                const tagBytes = await crypto.subtle.sign('HMAC', this.kMac, macInput);
                 const toHex = arr => Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
                 return { nonce: toHex(nonce), ct: toHex(ct), tag: toHex(new Uint8Array(tagBytes)) };
             }
