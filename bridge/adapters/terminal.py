@@ -117,7 +117,15 @@ class AppleTerminalAdapter(TerminalAdapter):
             tell application "Terminal"
                 {tab_finder}
                 if foundTab is not missing value then
-                    do script "" in foundTab
+                    set selected of foundTab to true
+                    set w to first window whose tabs contains foundTab
+                    set index of w to 1
+                    activate
+                    tell application "System Events"
+                        tell process "Terminal"
+                            key code 36
+                        end tell
+                    end tell
                     return "OK"
                 else
                     return "ERROR: Terminal session not found"
@@ -157,11 +165,29 @@ class AppleTerminalAdapter(TerminalAdapter):
             # Direct background execution with Enter (Default)
             action_desc = "Prompt (Execute)"
             escaped_text = escape_for_applescript(text)
+
+            # Interactive CLI agents (Codex, Claude, OpenCode, Aider, Agy) run in raw mode
+            # where `do script` populates the buffer but requires a Return keystroke (key code 36)
+            # to submit. Standard shell prompts (zsh, bash) execute immediately on `do script`.
+            is_interactive_agent = target.agent in ("codex", "claude", "opencode", "aider", "agy") or target.agent != "shell"
+
+            press_enter_snippet = """
+                    delay 0.05
+                    set selected of foundTab to true
+                    set w to first window whose tabs contains foundTab
+                    set index of w to 1
+                    activate
+                    tell application "System Events"
+                        tell process "Terminal"
+                            key code 36
+                        end tell
+                    end tell""" if is_interactive_agent else ""
+
             script = f'''
             tell application "Terminal"
                 {tab_finder}
                 if foundTab is not missing value then
-                    do script "{escaped_text}" in foundTab
+                    do script "{escaped_text}" in foundTab{press_enter_snippet}
                     return "OK"
                 else
                     return "ERROR: Terminal tab or session not found"

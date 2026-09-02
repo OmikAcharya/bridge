@@ -261,21 +261,23 @@ class SessionDiscovery:
             set outText to ""
             set wIdx to 1
             repeat with w in every window
-                set tIdx to 1
-                repeat with t in every tab of w
-                    set ttyName to tty of t
-                    set winName to name of w
-                    set customTitle to custom title of t
-                    set isSelected to selected of t
-                    set isBusy to busy of t
-                    set procList to processes of t
-                    set procStr to ""
-                    repeat with p in procList
-                        set procStr to procStr & p & ","
+                try
+                    set tIdx to 1
+                    repeat with t in every tab of w
+                        set ttyName to tty of t
+                        set winName to name of w
+                        set customTitle to custom title of t
+                        set isSelected to selected of t
+                        set isBusy to busy of t
+                        set procList to processes of t
+                        set procStr to ""
+                        repeat with p in procList
+                            set procStr to procStr & p & ","
+                        end repeat
+                        set outText to outText & wIdx & "<SEP>" & tIdx & "<SEP>" & ttyName & "<SEP>" & isSelected & "<SEP>" & isBusy & "<SEP>" & procStr & "<SEP>" & winName & "<END_ROW>"
+                        set tIdx to tIdx + 1
                     end repeat
-                    set outText to outText & wIdx & "<SEP>" & tIdx & "<SEP>" & ttyName & "<SEP>" & isSelected & "<SEP>" & isBusy & "<SEP>" & procStr & "<SEP>" & winName & "<END_ROW>"
-                    set tIdx to tIdx + 1
-                end repeat
+                end try
                 set wIdx to wIdx + 1
             end repeat
             return outText

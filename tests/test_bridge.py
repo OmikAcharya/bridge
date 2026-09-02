@@ -245,12 +245,19 @@ class TestAdaptersAndEscaping(unittest.TestCase):
             # 2. Raw Enter
             res4 = term_adapter.send(target_term, text="", action="raw_enter")
             self.assertTrue(res4.success)
+            self.assertIn("key code 36", mock_run.call_args[0][0][2])
 
             res5 = iterm_adapter.send(target_iterm, text="", action="raw_enter")
             self.assertTrue(res5.success)
 
             res6 = legacy_adapter.send(target_legacy, text="", action="raw_enter")
             self.assertTrue(res6.success)
+
+            # 3. Interactive CLI agent execute triggers hardware Return key code 36
+            target_codex = Target(id="codex", name="Codex", display_name="Codex", agent="codex", agent_name="Codex", application="Terminal", tty="/dev/ttys003")
+            res7 = term_adapter.send(target_codex, text="hello codex", action="execute")
+            self.assertTrue(res7.success)
+            self.assertIn("key code 36", mock_run.call_args[0][0][2])
 
 
 class TestPromptRouter(unittest.TestCase):
