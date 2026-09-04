@@ -192,6 +192,15 @@ class SessionDiscovery:
 
             sanitized_procs = [redact_sensitive_cmd(p["cmd"]) for p in procs]
 
+            # Check for PTY proxy socket (enables focus-free PTYAdapter)
+            pty_sock_dir = os.environ.get("BRIDGE_PTY_SOCK_DIR", "/tmp")
+            pty_sock_path = os.path.join(pty_sock_dir, f"bridge_pty_{tty_short}.sock")
+            has_pty_sock = os.path.exists(pty_sock_path)
+
+            adapter_hint = "AppleTerminalAdapter" if app_name == "Terminal" else "ITermAdapter" if app_name == "iTerm" else "auto"
+            if has_pty_sock:
+                adapter_hint = "PTYAdapter"
+
             target = Target(
                 id=target_id,
                 name=name_label,
@@ -208,13 +217,14 @@ class SessionDiscovery:
                 cmd=raw_cmd,
                 win_idx=tab_info.get("win_idx"),
                 tab_idx=tab_info.get("tab_idx"),
-                adapter="AppleTerminalAdapter" if app_name == "Terminal" else "ITermAdapter" if app_name == "iTerm" else "auto",
+                adapter=adapter_hint,
                 metadata={
                     "tty_short": tty_short,
                     "compact_cwd": compact_cwd,
                     "win_name": win_title,
                     "short_cmd": short_cmd,
-                    "procs": sanitized_procs
+                    "procs": sanitized_procs,
+                    "pty_sock": pty_sock_path if has_pty_sock else None
                 }
             )
             targets.append(target)
@@ -251,21 +261,23 @@ class SessionDiscovery:
             set outText to ""
             set wIdx to 1
             repeat with w in every window
-                set tIdx to 1
-                repeat with t in every tab of w
-                    set ttyName to tty of t
-                    set winName to name of w
-                    set customTitle to custom title of t
-                    set isSelected to selected of t
-                    set isBusy to busy of t
-                    set procList to processes of t
-                    set procStr to ""
-                    repeat with p in procList
-                        set procStr to procStr & p & ","
+                try
+                    set tIdx to 1
+                    repeat with t in every tab of w
+                        set ttyName to tty of t
+                        set winName to name of w
+                        set customTitle to custom title of t
+                        set isSelected to selected of t
+                        set isBusy to busy of t
+                        set procList to processes of t
+                        set procStr to ""
+                        repeat with p in procList
+                            set procStr to procStr & p & ","
+                        end repeat
+                        set outText to outText & wIdx & "<SEP>" & tIdx & "<SEP>" & ttyName & "<SEP>" & isSelected & "<SEP>" & isBusy & "<SEP>" & procStr & "<SEP>" & winName & "<END_ROW>"
+                        set tIdx to tIdx + 1
                     end repeat
-                    set outText to outText & wIdx & "<SEP>" & tIdx & "<SEP>" & ttyName & "<SEP>" & isSelected & "<SEP>" & isBusy & "<SEP>" & procStr & "<SEP>" & winName & "<END_ROW>"
-                    set tIdx to tIdx + 1
-                end repeat
+                end try
                 set wIdx to wIdx + 1
             end repeat
             return outText

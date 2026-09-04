@@ -6,6 +6,7 @@ from bridge.adapters.base import TerminalAdapter
 from bridge.adapters.terminal import AppleTerminalAdapter
 from bridge.adapters.iterm import ITermAdapter
 from bridge.adapters.legacy import LegacyPasteAdapter
+from bridge.adapters.pty_adapter import PTYAdapter
 from bridge.adapters.factory import get_adapter, AdapterFactory
 
 __all__ = [
@@ -13,6 +14,7 @@ __all__ = [
     "AppleTerminalAdapter",
     "ITermAdapter",
     "LegacyPasteAdapter",
+    "PTYAdapter",
     "get_adapter",
     "AdapterFactory",
 ]

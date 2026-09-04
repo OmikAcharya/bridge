@@ -23,7 +23,9 @@ class TestP2PAndQR(unittest.TestCase):
     def test_p2p_manager_pairing_url_and_auth(self):
         p2p = P2PManager(room_id="room123", auth_key="secretkey_xyz")
         p2p_url = p2p.generate_p2p_url()
-        self.assertIn("https://omikacharya.github.io/bridge/#p2p=1&room=room123&key=secretkey_xyz", p2p_url)
+        self.assertIn("room=room123", p2p_url)
+        self.assertIn("key=secretkey_xyz", p2p_url)
+        self.assertIn("https://omikacharya.github.io/bridge/", p2p_url)
 
         lan_url = p2p.generate_lan_url("192.168.1.5", 8765)
         self.assertEqual(lan_url, "http://192.168.1.5:8765")

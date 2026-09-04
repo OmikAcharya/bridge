@@ -79,14 +79,14 @@ From the master key $K_{\text{master}}$, separate keys are derived for encryptio
 ## Transport Layer Mechanics
 
 ### Host Implementation (`bridge/p2p.py`)
-- Uses Python standard library `socket`, `struct`, and `threading`.
-- Implements `MiniMQTTClient`, a minimal MQTT v3.1.1 framing client (~100 LOC).
-- Connects outbound to TCP port 1883 on `broker.emqx.io` (with automatic failover to `broker.hivemq.com`).
+- Uses Python standard library `socket`, `ssl`, `struct`, and `threading`.
+- Implements `MiniMQTTClient`, supporting outbound WSS (port 443) and raw TCP (port 1883).
+- Connects outbound to `wss://public.cloud.shiftr.io:443/mqtt` with fallback to HiveMQ and EMQX.
 - Subscribes to `pb/<room_id>/mac` and publishes responses to `pb/<room_id>/phone`.
 
 ### Client Implementation (`bridge/server.py`, `docs/index.html`)
-- Uses browser native `WebSocket` over TLS (`wss://broker.emqx.io:8084/mqtt`).
-- Implements `NanoMQTTWS`, a lightweight binary MQTT client (~50 LOC).
+- Uses browser native `WebSocket` over TLS (`wss://public.cloud.shiftr.io:443/mqtt`, fallback to HiveMQ/EMQX).
+- Implements `NanoMQTTWS`, a lightweight binary MQTT client with credential support.
 - Subscribes to `pb/<room_id>/phone` and publishes requests to `pb/<room_id>/mac`.
 
 ---
