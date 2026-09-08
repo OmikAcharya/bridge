@@ -351,14 +351,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             margin-bottom: 10px;
             flex-shrink: 0;
             transition: opacity 0.15s ease, max-height 0.2s ease, margin 0.15s ease;
-            max-height: 240px;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
-        }
-
-        .bento-grid::-webkit-scrollbar {
-            display: none;
         }
 
         .bento-tile {
