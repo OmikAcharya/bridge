@@ -33,9 +33,8 @@ class DirectP2PTransport:
             # Minimal stub: create PeerConnection, set up data channel
             self._rtc = aiortc.RTCPeerConnection()
             self._channel = self._rtc.createDataChannel('bridge')
-            self._channel.on('message', self._on_message)
-            self._active = True
-            # Signaling would be handled elsewhere; here we just note success
+            # ponytail: stub until signaling is implemented; keep fallback to relay active
+            self._active = False
         except Exception as e:
             # Log and signal fallback
             import logging
@@ -175,9 +174,11 @@ class MiniMQTTClient:
         self.sock: Optional[socket.socket] = None
         self.running = False
         self._lock = threading.Lock()
+        self._buf = bytearray()
 
     def connect(self) -> bool:
         with self._lock:
+            self._buf.clear()
             if self.sock:
                 try:
                     self.sock.close()
@@ -236,19 +237,23 @@ class MiniMQTTClient:
             return True
 
     def _send_raw(self, pkt: bytes):
-        if self.is_ws:
-            mask = secrets.token_bytes(4)
-            masked = bytes([b ^ mask[i % 4] for i, b in enumerate(pkt)])
-            rem = len(pkt)
-            if rem < 126:
-                h = bytes([0x82, 0x80 | rem])
-            elif rem < 65536:
-                h = bytes([0x82, 0x80 | 126]) + struct.pack(">H", rem)
+        try:
+            if self.is_ws:
+                mask = secrets.token_bytes(4)
+                masked = bytes([b ^ mask[i % 4] for i, b in enumerate(pkt)])
+                rem = len(pkt)
+                if rem < 126:
+                    h = bytes([0x82, 0x80 | rem])
+                elif rem < 65536:
+                    h = bytes([0x82, 0x80 | 126]) + struct.pack(">H", rem)
+                else:
+                    h = bytes([0x82, 0x80 | 127]) + struct.pack(">Q", rem)
+                self.sock.sendall(h + mask + masked)
             else:
-                h = bytes([0x82, 0x80 | 127]) + struct.pack(">Q", rem)
-            self.sock.sendall(h + mask + masked)
-        else:
-            self.sock.sendall(pkt)
+                self.sock.sendall(pkt)
+        except Exception:
+            self.running = False
+            raise
 
     def _recv_exact(self, n: int) -> Optional[bytes]:
         buf = bytearray()
@@ -256,19 +261,53 @@ class MiniMQTTClient:
             try:
                 chunk = self.sock.recv(n - len(buf))
                 if not chunk:
+                    self.running = False
                     return None
                 buf.extend(chunk)
             except (socket.timeout, TimeoutError):
                 return None
+            except Exception:
+                self.running = False
+                return None
         return bytes(buf)
 
+    def _extract_packet_from_buf(self) -> Optional[bytes]:
+        if len(self._buf) < 2:
+            return None
+        multiplier = 1
+        rem_len = 0
+        idx = 1
+        found = False
+        while idx < len(self._buf) and idx <= 4:
+            b = self._buf[idx]
+            rem_len += (b & 127) * multiplier
+            multiplier *= 128
+            idx += 1
+            if (b & 128) == 0:
+                found = True
+                break
+        if not found:
+            return None
+        total_len = idx + rem_len
+        if len(self._buf) >= total_len:
+            pkt = bytes(self._buf[:total_len])
+            del self._buf[:total_len]
+            return pkt
+        return None
+
     def _recv_raw_packet(self, timeout: float = 1.0) -> Optional[bytes]:
+        pkt = self._extract_packet_from_buf()
+        if pkt:
+            return pkt
         if not self.sock:
             return None
-        self.sock.settimeout(timeout)
+
+        deadline = time.time() + timeout
         try:
-            if self.is_ws:
-                while True:
+            while self.sock and time.time() < deadline:
+                rem_time = max(0.05, deadline - time.time())
+                self.sock.settimeout(rem_time)
+                if self.is_ws:
                     head = self._recv_exact(2)
                     if not head:
                         return None
@@ -308,35 +347,27 @@ class MiniMQTTClient:
                     elif opcode == 0xA:  # Pong
                         continue
                     elif opcode in (0x1, 0x2):  # Binary/Text MQTT packet
-                        return payload
+                        self._buf.extend(payload)
+                        pkt = self._extract_packet_from_buf()
+                        if pkt:
+                            return pkt
                     else:
                         continue
-            else:
-                head = self._recv_exact(1)
-                if not head:
-                    return None
-                cmd = head[0]
-                multiplier = 1
-                rem = 0
-                rem_bytes = bytearray()
-                while True:
-                    b_bytes = self._recv_exact(1)
-                    if not b_bytes:
+                else:
+                    chunk = self.sock.recv(4096)
+                    if not chunk:
+                        self.running = False
                         return None
-                    b = b_bytes[0]
-                    rem_bytes.append(b)
-                    rem += (b & 127) * multiplier
-                    multiplier *= 128
-                    if (b & 128) == 0:
-                        break
-                payload = self._recv_exact(rem)
-                if payload is None:
-                    return None
-                return bytes([cmd]) + bytes(rem_bytes) + payload
+                    self._buf.extend(chunk)
+                    pkt = self._extract_packet_from_buf()
+                    if pkt:
+                        return pkt
         except (socket.timeout, TimeoutError):
-            return None
+            return self._extract_packet_from_buf()
         except Exception:
+            self.running = False
             return None
+        return self._extract_packet_from_buf()
 
     def subscribe(self, topic: str):
         with self._lock:
@@ -382,6 +413,7 @@ class MiniMQTTClient:
         pkt = self._recv_raw_packet(timeout=timeout)
         if not pkt or (pkt[0] & 0xF0) != 0x30:
             return None
+        qos = (pkt[0] >> 1) & 0x03
         idx = 1
         multiplier = 1
         rem_len = 0
@@ -392,16 +424,26 @@ class MiniMQTTClient:
             multiplier *= 128
             if (b & 128) == 0:
                 break
+        var_header_start = idx
         top_len = struct.unpack(">H", pkt[idx:idx+2])[0]
         idx += 2
         topic = pkt[idx:idx+top_len].decode("utf-8", errors="ignore")
         idx += top_len
-        payload = pkt[idx:].decode("utf-8", errors="ignore")
+        if qos > 0 and idx + 2 <= len(pkt):
+            pkt_id = struct.unpack(">H", pkt[idx:idx+2])[0]
+            idx += 2
+            try:
+                self._send_raw(struct.pack(">BBH", 0x40, 2, pkt_id))
+            except Exception:
+                pass
+        payload_end = var_header_start + rem_len
+        payload = pkt[idx:payload_end].decode("utf-8", errors="ignore")
         return topic, payload
 
     def close(self):
         self.running = False
         with self._lock:
+            self._buf.clear()
             if self.sock:
                 try:
                     self._send_raw(b"\xE0\x00")  # DISCONNECT
@@ -525,6 +567,7 @@ class P2PManager:
                 host, port = entry[:2]
                 is_ws, path, uname, pword = (port == 443), "/mqtt", None, None
 
+            client = None
             try:
                 client = MiniMQTTClient(
                     host=host,
@@ -559,10 +602,18 @@ class P2PManager:
                 logger.debug("P2P relay loop (%s) reconnecting: %s", host, e)
                 broker_idx += 1
                 time.sleep(2.0)
+            finally:
+                if client:
+                    client.close()
 
     def _handle_p2p_message(self, client: MiniMQTTClient, reply_topic: str, payload_str: str, router, target_manager):
         try:
-            raw_data = json.loads(payload_str)
+            payload_str = payload_str.strip()
+            try:
+                raw_data = json.loads(payload_str)
+            except json.JSONDecodeError:
+                decoder = json.JSONDecoder()
+                raw_data, _ = decoder.raw_decode(payload_str)
             # Decrypt if encrypted envelope
             if isinstance(raw_data, dict) and "ct" in raw_data and "nonce" in raw_data and "tag" in raw_data:
                 try:
@@ -596,7 +647,17 @@ class P2PManager:
 
             elif action == "get_targets":
                 targets = target_manager.get_targets() if target_manager else []
-                targets_dict = [t.to_dict() for t in targets]
+                targets_dict = []
+                for t in targets:
+                    td = t.to_dict()
+                    if td.get("cmd") and len(td["cmd"]) > 120:
+                        td["cmd"] = td["cmd"][:117] + "..."
+                    if td.get("metadata"):
+                        td["metadata"] = {
+                            k: v for k, v in td["metadata"].items()
+                            if k in ("compact_cwd", "short_cmd", "tty_short", "alias_id")
+                        }
+                    targets_dict.append(td)
                 default_t = "auto"
                 for t in targets:
                     if t.agent in ("claude", "codex", "opencode", "aider", "agy") and t.id != "focused":
@@ -627,6 +688,8 @@ class P2PManager:
                     adapter = get_adapter(target)
                     raw_history = adapter.get_history(target, lines=max(lines_count, 50))
                     content = compress_caveman_ultra(raw_history) if mode == "ultra" else format_raw_tail(raw_history, lines=lines_count)
+                    if len(content) > 15000:
+                        content = content[-15000:]
                     response_payload = {
                         "id": req_id,
                         "action": "tail_response",
@@ -655,6 +718,7 @@ class P2PManager:
 
             if response_payload is not None:
                 json_str = json.dumps(response_payload)
+                logger.debug("Publishing P2P response for %s (len=%d) to %s", action, len(json_str), reply_topic)
                 if is_encrypted:
                     env = self.crypto.encrypt(json_str)
                     client.publish(reply_topic, json.dumps(env))
@@ -662,7 +726,7 @@ class P2PManager:
                     client.publish(reply_topic, json_str)
 
         except Exception as e:
-            logger.debug("Error processing P2P message: %s", e)
+            logger.exception("Error processing P2P message: %s", e)
 
     def stop(self):
         self.running = False
