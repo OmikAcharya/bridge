@@ -259,6 +259,35 @@ class TestAdaptersAndEscaping(unittest.TestCase):
             self.assertTrue(res7.success)
             self.assertIn("key code 36", mock_run.call_args[0][0][2])
 
+    def test_legacy_adapter_accessibility_error_and_clipboard_preservation(self):
+        """LegacyPasteAdapter provides actionable error on code 1002 and preserves clipboard."""
+        from bridge.adapters.legacy import LegacyPasteAdapter
+        adapter = LegacyPasteAdapter()
+        target = Target(id="focused", name="focused", display_name="focused", agent="legacy", agent_name="Legacy", application="Active Window")
+
+        # Mock _try_cg_paste to return False, and osascript to raise error 1002
+        with patch("bridge.adapters.legacy._try_cg_paste", return_value=False):
+            err = subprocess.CalledProcessError(
+                1,
+                ["osascript"],
+                stderr=b"36:68: execution error: System Events got an error: osascript is not allowed to send keystrokes. (1002)"
+            )
+            def mock_run_side_effect(cmd, *args, **kwargs):
+                if cmd[0] == "osascript":
+                    raise err
+                return MagicMock(returncode=0, stdout=b"prev_clip")
+
+            with patch("subprocess.run", side_effect=mock_run_side_effect) as mock_run:
+                res = adapter.send(target, "my secret prompt", action="execute")
+                self.assertFalse(res.success)
+                self.assertIn("Accessibility permission required", res.error)
+                self.assertIn("System Settings", res.error)
+                self.assertIn("copied to clipboard", res.error)
+
+                # Ensure pbcopy was called with the prompt text
+                pbcopy_calls = [c for c in mock_run.call_args_list if c[0][0][0] == "pbcopy"]
+                self.assertTrue(any(c[1].get("input") == b"my secret prompt" for c in pbcopy_calls))
+
 
 class TestPromptRouter(unittest.TestCase):
     def setUp(self):

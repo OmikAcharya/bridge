@@ -12,6 +12,7 @@ import logging
 import os
 import signal
 import socket
+import time
 from typing import Optional
 
 from bridge.models import Target, DeliveryResult
@@ -101,36 +102,50 @@ class PTYAdapter(TerminalAdapter):
             # execute / paste_and_enter / send: text + newline
             payload = text.encode("utf-8") + b"\n"
 
-        try:
-            conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            conn.settimeout(3.0)
-            conn.connect(sock_path)
-            conn.sendall(payload)
-            conn.close()
+        last_err = None
+        for attempt in range(3):
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+                    conn.settimeout(3.0)
+                    conn.connect(sock_path)
+                    conn.sendall(payload)
 
-            return DeliveryResult(
-                success=True,
-                target_id=target.id,
-                target_name=target.name,
-                adapter_used=self.name,
-                message=f"Injected {len(payload)} bytes via PTY to {target.name}"
-            )
-        except socket.timeout:
-            return DeliveryResult(
-                success=False,
-                target_id=target.id,
-                target_name=target.name,
-                adapter_used=self.name,
-                error="PTY proxy socket connection timed out."
-            )
-        except OSError as e:
-            return DeliveryResult(
-                success=False,
-                target_id=target.id,
-                target_name=target.name,
-                adapter_used=self.name,
-                error=f"PTY socket error: {e}"
-            )
+                return DeliveryResult(
+                    success=True,
+                    target_id=target.id,
+                    target_name=target.name,
+                    adapter_used=self.name,
+                    message=f"Injected {len(payload)} bytes via PTY to {target.name}"
+                )
+            except (ConnectionRefusedError, FileNotFoundError) as e:
+                last_err = e
+                if attempt < 2:
+                    time.sleep(0.05)
+                    continue
+            except socket.timeout:
+                return DeliveryResult(
+                    success=False,
+                    target_id=target.id,
+                    target_name=target.name,
+                    adapter_used=self.name,
+                    error="PTY proxy socket connection timed out."
+                )
+            except OSError as e:
+                return DeliveryResult(
+                    success=False,
+                    target_id=target.id,
+                    target_name=target.name,
+                    adapter_used=self.name,
+                    error=f"PTY socket error: {e}"
+                )
+
+        return DeliveryResult(
+            success=False,
+            target_id=target.id,
+            target_name=target.name,
+            adapter_used=self.name,
+            error=f"PTY socket error: {last_err}"
+        )
 
     def _send_interrupt(self, target: Target) -> DeliveryResult:
         """Sends SIGINT to the target's foreground process group."""
@@ -152,11 +167,10 @@ class PTYAdapter(TerminalAdapter):
         sock_path = _find_socket(target)
         if sock_path:
             try:
-                conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                conn.settimeout(1.0)
-                conn.connect(sock_path)
-                conn.sendall(b"\x03")
-                conn.close()
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+                    conn.settimeout(1.0)
+                    conn.connect(sock_path)
+                    conn.sendall(b"\x03")
             except OSError:
                 pass
 
