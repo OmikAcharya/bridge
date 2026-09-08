@@ -14,11 +14,76 @@ from bridge.server import create_server
 class TestP2PAndQR(unittest.TestCase):
 
     def test_qr_code_generation(self):
-        qr = QRCode("https://example.com/#p2p=1&room=abc123")
+        # 1. Structure validation
+        url = "https://example.com/#p2p=1&room=abc123"
+        qr = QRCode(url)
         self.assertGreater(qr.size, 20)
-        self.assertGreater(len(qr.matrix), 20)
-        ascii_qr = qr.to_terminal(quiet_zone=1)
+        self.assertEqual(len(qr.matrix), qr.size)
+        self.assertEqual(len(qr.matrix[0]), qr.size)
+
+        # Verify top-left finder center is 1
+        self.assertEqual(qr.matrix[3][3], 1)
+        # Verify top-left finder border is 1
+        self.assertEqual(qr.matrix[0][0], 1)
+        # Verify separator is 0
+        self.assertEqual(qr.matrix[7][7], 0)
+        # Verify dark module
+        self.assertEqual(qr.matrix[qr.size - 8][8], 1)
+
+        ascii_qr = qr.to_terminal(quiet_zone=2)
         self.assertIn("█", ascii_qr)
+
+        # 2. Test jsQR decode if node is available
+        import os, subprocess, tempfile
+        jsqr_path = "/Users/mac/.gemini/antigravity-cli/brain/1dfdea2f-dd0c-4183-8aeb-b7b19b23ea47/scratch/node_modules/jsqr"
+        if os.path.exists(jsqr_path):
+            for test_input in [
+                "http://192.168.1.100:8765",
+                "https://omikacharya.github.io/bridge/?v=1741541234#p2p=1&room=51b612b3c7a6&key=4A4jY6q8w3n_qW2zP",
+                "https://omikacharya.github.io/bridge/?v=1741541234&extra=1234567890abcdef#p2p=1&room=51b612b3c7a6&key=4A4jY6q8w3n_qW2zP"
+            ]:
+                q = QRCode(test_input)
+                qz = 4
+                tot = q.size + 2 * qz
+                scale = 3
+                img_w = tot * scale
+                img_h = tot * scale
+                rgba = bytearray(img_w * img_h * 4)
+
+                for r in range(tot):
+                    for c in range(tot):
+                        qr_r, qr_c = r - qz, c - qz
+                        is_dark = False
+                        if 0 <= qr_r < q.size and 0 <= qr_c < q.size:
+                            is_dark = (q.matrix[qr_r][qr_c] == 1)
+                        val = 0 if is_dark else 255
+                        for py in range(scale):
+                            for px in range(scale):
+                                idx = ((r * scale + py) * img_w + (c * scale + px)) * 4
+                                rgba[idx] = val
+                                rgba[idx+1] = val
+                                rgba[idx+2] = val
+                                rgba[idx+3] = 255
+
+                with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as tf:
+                    tf.write(rgba)
+                    raw_path = tf.name
+
+                try:
+                    node_script = f'''
+                    const fs = require('fs');
+                    const jsQR = require('{jsqr_path}');
+                    const raw = fs.readFileSync('{raw_path}');
+                    const code = jsQR(new Uint8ClampedArray(raw), {img_w}, {img_h});
+                    if (!code) process.exit(1);
+                    process.stdout.write(code.data);
+                    '''
+                    p = subprocess.run(["node", "-e", node_script], capture_output=True, text=True)
+                    self.assertEqual(p.returncode, 0, f"jsQR failed to decode {test_input} (Version {q.version})")
+                    self.assertEqual(p.stdout, test_input)
+                finally:
+                    if os.path.exists(raw_path):
+                        os.unlink(raw_path)
 
     def test_p2p_manager_pairing_url_and_auth(self):
         p2p = P2PManager(room_id="room123", auth_key="secretkey_xyz")
