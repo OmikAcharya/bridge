@@ -41,6 +41,11 @@ class TestServerAPI(unittest.TestCase):
             self.assertIn("Prompt Bridge", body)
             self.assertIn("bentoGrid", body)
 
+    def test_get_html_bytes_matches_docs(self):
+        from bridge.server import get_html_bytes, HTML_PATH
+        self.assertTrue(HTML_PATH.is_file())
+        self.assertEqual(get_html_bytes(), HTML_PATH.read_bytes())
+
     def test_get_ping(self):
         url = f"http://127.0.0.1:{self.config.port}/ping"
         req = urllib.request.Request(url)
