@@ -67,12 +67,12 @@ class TestServerAPI(unittest.TestCase):
             self.assertTrue(any(t["id"] == "focused" for t in targets))
 
     def test_get_terminal_tail(self):
-        url = f"http://127.0.0.1:{self.config.port}/terminal/tail?target=focused&mode=ultra"
+        url = f"http://127.0.0.1:{self.config.port}/terminal/tail?target=focused"
         with urllib.request.urlopen(url) as resp:
             self.assertEqual(resp.status, 200)
             data = json.loads(resp.read().decode("utf-8"))
             self.assertTrue(data["success"])
-            self.assertEqual(data["mode"], "ultra")
+            self.assertEqual(data["mode"], "raw")
             self.assertIn("content", data)
 
 

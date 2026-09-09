@@ -47,7 +47,7 @@ Software development with interactive CLI agents (such as Claude Code, Antigravi
 │   ├── Discovery Engine: Parses process trees, CWDs, and TTY devices    │
 │   ├── Target Manager: Tracks active agents and alias routes            │
 │   ├── Crypto Engine: CTR stream cipher + HMAC-SHA256 verification      │
-│   ├── Compressor: Caveman Ultra log compression engine                 │
+│   ├── Formatter: Terminal output ANSI stripping and tail formatting    │
 │   └── Terminal Adapters:                                               │
 │       ├── Terminal.app Adapter (Background AppleScript)                │
 │       ├── iTerm2 Adapter (Background OSA IPC)                          │
@@ -93,10 +93,8 @@ When operating in default zero-exposure mode:
   - Verification: Constant-time comparison rejects tampered or mismatched payloads prior to deserialization.
 - **Relay Transport**: Both host and client connect outbound to public MQTT WebSocket endpoints (`broker.emqx.io:8084`, `broker.hivemq.com:8084`). Host listens on TCP 1883 with automatic failover.
 
-### 4. Live Output Monitoring & Compression
-The web client includes an activity log drawer for tracking terminal output:
-- **Caveman Ultra Mode**: Strips ANSI escape sequences, normalizes whitespace, and summarizes repetitive progress lines to minimize token consumption and bandwidth.
-- **Raw Mode**: Displays unmodified terminal history for detailed verification.
+### 4. Live Output Monitoring
+The web client includes an activity log drawer for tracking terminal output history and verification directly from mobile.
 
 ---
 
@@ -194,7 +192,7 @@ Custom target aliases and server defaults can be configured via `~/.bridge_confi
 │   ├── server.py            # HTTP server, API endpoints, embedded web client
 │   ├── p2p.py               # E2EE crypto (CTR-HMAC-SHA256) & stdlib MQTT TCP client
 │   ├── qrcode.py            # ANSI Unicode QR generator
-│   ├── compressor.py        # Caveman Ultra log compression engine
+│   ├── compressor.py        # Terminal output ANSI stripping and tail formatter
 │   ├── models.py            # Target, PromptRequest, DeliveryResult dataclasses
 │   ├── config.py            # File and environment configuration loader
 │   └── adapters/

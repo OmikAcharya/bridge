@@ -18,7 +18,7 @@ from typing import Dict, Any, Optional, Tuple
 
 from bridge.qrcode import print_qr_code
 from bridge.models import PromptRequest
-from bridge.compressor import compress_caveman_ultra, format_raw_tail
+from bridge.compressor import format_raw_tail
 from bridge.adapters.factory import get_adapter
 
 logger = logging.getLogger("PromptBridge.P2P")
@@ -579,7 +579,6 @@ class P2PManager:
 
             elif action == "get_tail":
                 target_id = req.get("target", "auto")
-                mode = req.get("mode", "ultra")
                 lines_count = int(req.get("lines", 40))
 
                 target = target_manager.resolve(target_id) if target_manager else None
@@ -593,7 +592,7 @@ class P2PManager:
                 else:
                     adapter = get_adapter(target)
                     raw_history = adapter.get_history(target, lines=max(lines_count, 50))
-                    content = compress_caveman_ultra(raw_history) if mode == "ultra" else format_raw_tail(raw_history, lines=lines_count)
+                    content = format_raw_tail(raw_history, lines=lines_count)
                     if len(content) > 15000:
                         content = content[-15000:]
                     response_payload = {
@@ -602,7 +601,7 @@ class P2PManager:
                         "success": True,
                         "target_id": target.id,
                         "target_name": target.name,
-                        "mode": mode,
+                        "mode": "raw",
                         "content": content,
                         "is_busy": target.is_busy
                     }

@@ -821,35 +821,6 @@
             gap: 6px;
         }
 
-        /* Segmented Mode Pill */
-        .mode-segmented {
-            display: flex;
-            background: var(--bg);
-            border: 1px solid var(--surface-border);
-            border-radius: 6px;
-            padding: 2px;
-            gap: 2px;
-        }
-
-        .mode-pill {
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            font-size: 10px;
-            font-family: var(--font-mono);
-            font-weight: 500;
-            padding: 2px 7px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.12s ease;
-        }
-
-        .mode-pill.active {
-            background: var(--surface-hover);
-            color: var(--text-main);
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-        }
-
         .btn-icon-micro {
             background: var(--surface-hover);
             border: 1px solid var(--surface-border);
@@ -864,30 +835,24 @@
             transition: all 0.12s ease;
         }
 
-        .btn-icon-micro:active {
+        .btn-icon-micro:hover {
+            background: var(--surface-active);
             color: var(--text-main);
-            border-color: var(--surface-border-focus);
         }
 
         .cockpit-activity-content {
             flex: 1;
             overflow-y: auto;
             padding: 14px;
-            font-size: 13px;
-            line-height: 1.55;
-            color: var(--text-main);
-            white-space: pre-wrap;
-            word-break: break-word;
-            -webkit-overflow-scrolling: touch;
-            background: var(--bg);
-        }
-
-        .cockpit-activity-content.raw-view {
             font-family: var(--font-mono);
             font-size: 11px;
+            line-height: 1.55;
             color: var(--text-muted);
             white-space: pre;
             overflow-x: auto;
+            word-break: normal;
+            -webkit-overflow-scrolling: touch;
+            background: var(--bg);
         }
 
         .activity-empty {
@@ -1140,10 +1105,6 @@
                 <span id="cockpitTargetTitle" class="cockpit-target-title">Terminal Monitor</span>
             </div>
             <div class="cockpit-header-actions">
-                <div class="mode-segmented">
-                    <button type="button" id="pillUltra" class="mode-pill active">Ultra</button>
-                    <button type="button" id="pillRaw" class="mode-pill">Raw</button>
-                </div>
                 <button id="refreshCockpitBtn" class="btn-icon-micro" title="Refresh Output">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="23 4 23 10 17 10"></polyline>
@@ -1156,7 +1117,7 @@
         </div>
 
         <!-- Scrollable Full-Height Activity / Log Content -->
-        <div id="cockpitActivityContent" class="cockpit-activity-content caveman-view">
+        <div id="cockpitActivityContent" class="cockpit-activity-content">
             <div class="activity-empty">Connecting to terminal session...</div>
         </div>
 
@@ -1370,9 +1331,6 @@
         const cockpitBtnNo = document.getElementById('cockpitBtnNo');
         const cockpitBtnInterrupt = document.getElementById('cockpitBtnInterrupt');
 
-        const pillUltra = document.getElementById('pillUltra');
-        const pillRaw = document.getElementById('pillRaw');
-
         let lastCleared = '';
         let availableTargets = [];
         let selectedTargetId = localStorage.getItem('bridge_target_id') || 'auto';
@@ -1380,39 +1338,6 @@
         let lastSignature = '';
         let lastPromptText = '';
         let lastPingMs = null;
-
-        let isCavemanUltra = localStorage.getItem('bridge_caveman_output') !== 'false';
-        updateModeUI();
-
-        function updateModeUI() {
-            if (isCavemanUltra) {
-                pillUltra.classList.add('active');
-                pillRaw.classList.remove('active');
-                cockpitActivityContent.className = 'cockpit-activity-content caveman-view';
-            } else {
-                pillRaw.classList.add('active');
-                pillUltra.classList.remove('active');
-                cockpitActivityContent.className = 'cockpit-activity-content raw-view';
-            }
-        }
-
-        pillUltra.addEventListener('click', () => {
-            if (isCavemanUltra) return;
-            isCavemanUltra = true;
-            localStorage.setItem('bridge_caveman_output', 'true');
-            updateModeUI();
-            fetchActivityTail();
-            haptic(10);
-        });
-
-        pillRaw.addEventListener('click', () => {
-            if (!isCavemanUltra) return;
-            isCavemanUltra = false;
-            localStorage.setItem('bridge_caveman_output', 'false');
-            updateModeUI();
-            fetchActivityTail();
-            haptic(10);
-        });
 
         function autoResize(el) {
             el.style.height = 'auto';
@@ -1455,14 +1380,13 @@
 
             try {
                 const targetId = selectedTargetId;
-                const mode = isCavemanUltra ? 'ultra' : 'raw';
                 let data = null;
 
                 if (isP2P) {
                     if (!isP2PReady) return;
-                    data = await p2pRequest('get_tail', { target: targetId, mode: mode, lines: 40 });
+                    data = await p2pRequest('get_tail', { target: targetId, lines: 40 });
                 } else {
-                    const res = await fetch(`/terminal/tail?target=${encodeURIComponent(targetId)}&mode=${mode}&lines=40`, {
+                    const res = await fetch(`/terminal/tail?target=${encodeURIComponent(targetId)}&lines=40`, {
                         cache: 'no-store',
                         signal: activityAbortController.signal
                     });

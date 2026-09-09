@@ -19,7 +19,7 @@ from bridge.discovery import SessionDiscovery
 from bridge.targets import TargetManager
 from bridge.adapters.factory import AdapterFactory, get_adapter
 from bridge.router import PromptRouter
-from bridge.compressor import compress_caveman_ultra, format_raw_tail
+from bridge.compressor import format_raw_tail
 from bridge.p2p import P2PManager
 
 logger = logging.getLogger("PromptBridge.Server")
@@ -265,7 +265,6 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 parsed_url = urllib.parse.urlparse(self.path)
                 params = urllib.parse.parse_qs(parsed_url.query)
                 target_id = params.get("target", ["auto"])[0]
-                mode = params.get("mode", ["ultra"])[0].lower()
                 try:
                     raw_lines = int(params.get("lines", ["40"])[0])
                     lines_count = min(max(1, raw_lines), 200)
@@ -285,17 +284,13 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
 
                 adapter = get_adapter(target)
                 raw_history = adapter.get_history(target, lines=max(lines_count, 50))
-                
-                if mode == "ultra":
-                    content = compress_caveman_ultra(raw_history)
-                else:
-                    content = format_raw_tail(raw_history, lines=lines_count)
+                content = format_raw_tail(raw_history, lines=lines_count)
 
                 payload = json.dumps({
                     "success": True,
                     "target_id": target.id,
                     "target_name": target.name,
-                    "mode": mode,
+                    "mode": "raw",
                     "content": content,
                     "is_busy": target.is_busy
                 }).encode("utf-8")
