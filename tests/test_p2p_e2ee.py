@@ -208,16 +208,6 @@ class TestP2PEndToEndE2EE(unittest.TestCase):
         self.assertNotIn("extra_raw_env", sanitized.get("metadata", {}))
         self.assertEqual(sanitized["metadata"].get("compact_cwd"), "~/Projects/big")
 
-    def test_direct_p2p_transport_fallback(self):
-        """DirectP2PTransport falls back safely to MQTT relay worker without preempting."""
-        from bridge.p2p import DirectP2PTransport
-        transport = DirectP2PTransport(self.manager)
-        transport.start()
-        # Direct transport should not be active without real signaling
-        self.assertFalse(transport._active)
-        with self.assertRaises(RuntimeError):
-            transport.send("test")
-        transport.stop()
 
     def test_mini_mqtt_client_socket_eof_handling(self):
         """MiniMQTTClient cleanly sets running=False when socket receives EOF."""

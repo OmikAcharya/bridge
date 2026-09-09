@@ -14,81 +14,6 @@ import threading
 import time
 import json
 import logging
-import importlib
-
-class DirectP2PTransport:
-    """Stub for WebRTC DataChannel transport.
-    Tries to import aiortc; if unavailable, falls back to relay.
-    """
-
-    def __init__(self, p2p_manager: 'P2PManager'):
-        self.manager = p2p_manager
-        self._handler = None
-        self._active = False
-        self._rtc = None
-
-    def start(self) -> None:
-        try:
-            aiortc = importlib.import_module('aiortc')
-            # Minimal stub: create PeerConnection, set up data channel
-            self._rtc = aiortc.RTCPeerConnection()
-            self._channel = self._rtc.createDataChannel('bridge')
-            # ponytail: stub until signaling is implemented; keep fallback to relay active
-            self._active = False
-        except Exception as e:
-            # Log and signal fallback
-            import logging
-            logging.getLogger('PromptBridge.P2P').debug('Direct P2P unavailable: %s', e)
-            self._active = False
-            # Fallback to existing relay will be started by manager
-
-    def _on_message(self, payload):
-        if self._handler:
-            self._handler(payload)
-
-    def register_handler(self, handler) -> None:
-        self._handler = handler
-
-    def send(self, message: str) -> None:
-        if not self._active:
-            raise RuntimeError('Direct P2P not active')
-        self._channel.send(message)
-
-    def stop(self) -> None:
-        if self._rtc:
-            import asyncio
-            try:
-                asyncio.run(self._rtc.close())
-            except Exception:
-                pass
-        self._active = False
-
-
-from abc import ABC, abstractmethod
-
-class Transport(ABC):
-    """Abstract transport interface used by PromptRouter."""
-
-    @abstractmethod
-    def start(self) -> None:
-        """Initialize and start the transport. Should be non-blocking and return once ready."""
-        ...
-
-    @abstractmethod
-    def stop(self) -> None:
-        """Terminate the transport and clean up resources."""
-        ...
-
-    @abstractmethod
-    def send(self, message: str) -> None:
-        """Send a raw string message to the remote side."""
-        ...
-
-    @abstractmethod
-    def register_handler(self, handler) -> None:
-        """Register a callable that will receive incoming messages.
-        The handler will be called with a single argument: the message string."""
-        ...
 from typing import Dict, Any, Optional, Tuple
 
 from bridge.qrcode import print_qr_code
@@ -465,9 +390,6 @@ class P2PManager:
         self.relay_client: Optional[MiniMQTTClient] = None
         self.worker_thread: Optional[threading.Thread] = None
         self.running = False
-        # Direct P2P transport (optional, tries to use WebRTC)
-        self.direct_transport = DirectP2PTransport(self)
-        self._active_transport = None
 
     def generate_p2p_url(self) -> str:
         """Constructs secure P2P pairing URL pointing to the hosted static web client."""
@@ -526,25 +448,9 @@ class P2PManager:
         return secrets.compare_digest(token, self.auth_key)
 
     def start_relay(self, router, target_manager):
-        """Starts background P2P relay worker to service phone requests with zero open ports.
-        Attempts DirectP2PTransport first; falls back to MQTT relay.
-        """
+        """Starts background P2P relay worker to service phone requests with zero open ports."""
         if self.running:
             return
-        # Try direct transport
-        try:
-            self.direct_transport.start()
-        except Exception:
-            self.direct_transport = None
-        if getattr(self, 'direct_transport', None) and getattr(self.direct_transport, '_active', False):
-            self._active_transport = self.direct_transport
-            # Register handler to process incoming messages
-            # Register handler to process incoming messages (stub - no reply handling)
-        # self.direct_transport.register_handler(lambda msg: self._handle_p2p_message(None, None, msg, router, target_manager))
-            self.running = True
-            logger.info("Direct P2P transport active for room %s", self.room_id)
-            return
-        # Fallback to MQTT relay
         self.running = True
         self.worker_thread = threading.Thread(
             target=self._relay_loop,

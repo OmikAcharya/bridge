@@ -26,63 +26,6 @@ def _format_applescript_error(e: Exception) -> str:
     return str(e)
 
 
-def _try_cg_keystroke(key_code: int, flags: int = 0) -> bool:
-    """Attempts native CoreGraphics keyboard event posting (bypasses osascript)."""
-    try:
-        import ctypes
-        from ctypes import c_void_p, c_uint32, c_bool, c_uint64
-
-        app_services = ctypes.cdll.LoadLibrary('/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices')
-        if not app_services.AXIsProcessTrusted():
-            return False
-
-        cg = ctypes.cdll.LoadLibrary('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics')
-        cf = ctypes.cdll.LoadLibrary('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
-
-        cg.CGEventCreateKeyboardEvent.restype = c_void_p
-        cg.CGEventCreateKeyboardEvent.argtypes = [c_void_p, c_uint32, c_bool]
-        cg.CGEventSetFlags.restype = None
-        cg.CGEventSetFlags.argtypes = [c_void_p, c_uint64]
-        cg.CGEventPost.restype = None
-        cg.CGEventPost.argtypes = [c_uint32, c_void_p]
-        cf.CFRelease.restype = None
-        cf.CFRelease.argtypes = [c_void_p]
-
-        kCGSessionEventTap = 1
-
-        ev_down = cg.CGEventCreateKeyboardEvent(None, key_code, True)
-        if flags:
-            cg.CGEventSetFlags(ev_down, flags)
-        cg.CGEventPost(kCGSessionEventTap, ev_down)
-        cf.CFRelease(ev_down)
-
-        ev_up = cg.CGEventCreateKeyboardEvent(None, key_code, False)
-        if flags:
-            cg.CGEventSetFlags(ev_up, flags)
-        cg.CGEventPost(kCGSessionEventTap, ev_up)
-        cf.CFRelease(ev_up)
-
-        return True
-    except Exception:
-        return False
-
-
-def _try_cg_paste(press_enter: bool = True) -> bool:
-    kCGEventFlagMaskCommand = 0x00100000
-    kVK_ANSI_V = 0x09
-    kVK_Return = 0x24
-
-    if not _try_cg_keystroke(kVK_ANSI_V, kCGEventFlagMaskCommand):
-        return False
-
-    if press_enter:
-        time.sleep(0.05)
-        if not _try_cg_keystroke(kVK_Return, 0):
-            return False
-
-    return True
-
-
 class LegacyPasteAdapter(TerminalAdapter):
     """Adapter that pastes into whatever macOS application currently has GUI focus."""
 
@@ -104,18 +47,6 @@ class LegacyPasteAdapter(TerminalAdapter):
             )
 
         if action == "interrupt" or text == "\x03":
-            # Try CoreGraphics first
-            kCGEventFlagMaskControl = 0x00040000
-            kVK_ANSI_C = 0x08
-            if _try_cg_keystroke(kVK_ANSI_C, kCGEventFlagMaskControl):
-                return DeliveryResult(
-                    success=True,
-                    target_id=target.id,
-                    target_name="Focused Application",
-                    adapter_used=self.name,
-                    message="Sent Ctrl+C interrupt to focused application"
-                )
-
             try:
                 applescript = 'tell application "System Events" to keystroke "c" using control down'
                 subprocess.run(["osascript", "-e", applescript], check=True, capture_output=True, timeout=3.0)
@@ -136,16 +67,6 @@ class LegacyPasteAdapter(TerminalAdapter):
                 )
 
         if action == "raw_enter" or text == "\n":
-            kVK_Return = 0x24
-            if _try_cg_keystroke(kVK_Return, 0):
-                return DeliveryResult(
-                    success=True,
-                    target_id=target.id,
-                    target_name="Focused Application",
-                    adapter_used=self.name,
-                    message="Sent Return (Enter) to focused application"
-                )
-
             try:
                 applescript = 'tell application "System Events" to key code 36'
                 subprocess.run(["osascript", "-e", applescript], check=True, capture_output=True, timeout=3.0)
@@ -186,18 +107,7 @@ class LegacyPasteAdapter(TerminalAdapter):
 
             press_enter = action in ("paste_and_enter", "execute")
 
-            # 3. Try native CoreGraphics event injection first (fast, direct, no osascript sandbox)
-            if _try_cg_paste(press_enter=press_enter):
-                success = True
-                return DeliveryResult(
-                    success=True,
-                    target_id=target.id,
-                    target_name="Focused Application",
-                    adapter_used=self.name,
-                    message="Pasted into currently focused Mac application"
-                )
-
-            # 4. Fallback: AppleScript keystrokes via System Events
+            # 3. AppleScript keystrokes via System Events
             if press_enter:
                 applescript = (
                     'tell application "System Events"\n'

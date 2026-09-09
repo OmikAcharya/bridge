@@ -60,14 +60,8 @@ def classify_command(cmd_line: str) -> Tuple[str, str]:
 
 def pretty_path(path: str) -> str:
     """Replaces user home directory with ~ for compact display."""
-    if not path:
-        return ""
     home = os.path.expanduser("~")
-    if path == home:
-        return "~"
-    if path.startswith(home + "/"):
-        return "~" + path[len(home):]
-    return path
+    return ("~" + path[len(home):]) if path and path.startswith(home) else (path or "")
 
 
 class SessionDiscovery:
@@ -191,15 +185,7 @@ class SessionDiscovery:
                 short_cmd = os.path.basename(short_cmd)
 
             sanitized_procs = [redact_sensitive_cmd(p["cmd"]) for p in procs]
-
-            # Check for PTY proxy socket (enables focus-free PTYAdapter)
-            pty_sock_dir = os.environ.get("BRIDGE_PTY_SOCK_DIR", "/tmp")
-            pty_sock_path = os.path.join(pty_sock_dir, f"bridge_pty_{tty_short}.sock")
-            has_pty_sock = os.path.exists(pty_sock_path)
-
             adapter_hint = "AppleTerminalAdapter" if app_name == "Terminal" else "ITermAdapter" if app_name == "iTerm" else "auto"
-            if has_pty_sock:
-                adapter_hint = "PTYAdapter"
 
             target = Target(
                 id=target_id,
@@ -224,7 +210,6 @@ class SessionDiscovery:
                     "win_name": win_title,
                     "short_cmd": short_cmd,
                     "procs": sanitized_procs,
-                    "pty_sock": pty_sock_path if has_pty_sock else None
                 }
             )
             targets.append(target)

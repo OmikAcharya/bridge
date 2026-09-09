@@ -27,25 +27,21 @@ class Config:
     def load_file_config(self):
         """Loads optional configuration from JSON file if present."""
         for path in CONFIG_PATHS:
-            if os.path.isfile(path):
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    if "port" in data and not os.environ.get("BRIDGE_PORT"):
-                        self.port = int(data["port"])
-                    if "auth_token" in data and not os.environ.get("BRIDGE_AUTH_TOKEN"):
-                        self.auth_token = data["auth_token"]
-                    if "default_target" in data:
-                        self.default_target = data["default_target"]
-                    if "enable_legacy_paste" in data:
-                        self.enable_legacy_paste = bool(data["enable_legacy_paste"])
-                    if "expose_lan" in data and not os.environ.get("BRIDGE_EXPOSE_LAN"):
-                        self.expose_lan = bool(data["expose_lan"])
-                    if "targets" in data and isinstance(data["targets"], dict):
-                        self.static_targets = data["targets"]
-                    break
-                except Exception as e:
-                    print(f"[Config] Warning: Failed to read config from {path}: {e}")
+            if not os.path.isfile(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self.port = int(data.get("port", self.port)) if not os.environ.get("BRIDGE_PORT") else self.port
+                self.auth_token = data.get("auth_token", self.auth_token) if not os.environ.get("BRIDGE_AUTH_TOKEN") else self.auth_token
+                self.default_target = data.get("default_target", self.default_target)
+                self.enable_legacy_paste = bool(data.get("enable_legacy_paste", self.enable_legacy_paste))
+                self.expose_lan = bool(data.get("expose_lan", self.expose_lan)) if not os.environ.get("BRIDGE_EXPOSE_LAN") else self.expose_lan
+                if isinstance(data.get("targets"), dict):
+                    self.static_targets = data["targets"]
+                break
+            except Exception as e:
+                print(f"[Config] Warning: Failed to read config from {path}: {e}")
 
     def get_static_target(self, target_id: str) -> Optional[Dict[str, Any]]:
         return self.static_targets.get(target_id)
