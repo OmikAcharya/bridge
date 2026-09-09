@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Prompt Bridge: Voice dictation & text relay from mobile (Wispr Flow) to Mac.
+Prompt Bridge: Voice dictation & text relay from mobile to Mac.
 Direct input router for specific, already-running terminal agent instances.
 """
 
