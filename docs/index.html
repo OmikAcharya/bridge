@@ -285,11 +285,20 @@
         /* Bento Grid for Sessions */
         .bento-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 8px;
             margin-bottom: 10px;
             flex-shrink: 0;
+            width: 100%;
+            max-height: 220px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
             transition: opacity 0.15s ease, max-height 0.2s ease, margin 0.15s ease;
+        }
+
+        .bento-grid::-webkit-scrollbar {
+            display: none;
         }
 
         .bento-tile {
@@ -304,6 +313,8 @@
             transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
             position: relative;
             user-select: none;
+            min-width: 0;
+            overflow: hidden;
         }
 
         .bento-tile.active {
@@ -325,6 +336,8 @@
             align-items: center;
             justify-content: space-between;
             gap: 6px;
+            min-width: 0;
+            width: 100%;
         }
 
         .tile-name-group {
@@ -332,6 +345,7 @@
             align-items: center;
             gap: 6px;
             min-width: 0;
+            flex: 1;
         }
 
         .tile-dot {
@@ -357,6 +371,7 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            min-width: 0;
         }
 
         .tile-badge {
@@ -370,6 +385,7 @@
             text-transform: uppercase;
             letter-spacing: 0.03em;
             flex-shrink: 0;
+            margin-left: auto;
         }
 
         .tile-path {
@@ -379,6 +395,7 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            min-width: 0;
         }
 
         .tile-cmd {
@@ -388,6 +405,7 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            min-width: 0;
         }
 
         /* Keyboard Active Mini Session Bar */
@@ -1552,15 +1570,15 @@
             availableTargets.forEach(t => {
                 const tile = document.createElement('div');
                 const isSelected = (selectedTargetId === t.id);
-                tile.className = `bento-tile ${isSelected ? 'active' : ''}`;
                 const isBusy = (t.status === 'busy' || t.is_busy);
                 const dotClass = isBusy ? 'tile-dot busy' : 'tile-dot';
                 const compactPath = (t.metadata && t.metadata.compact_cwd) || t.folder || '~';
-                const ttyStr = t.tty ? t.tty.replace('/dev/', '') : '';
+                const ttyStr = t.tty ? t.tty.replace('/dev/', '') : (t.metadata && t.metadata.tty_short ? t.metadata.tty_short : '');
                 const shortName = t.agent_name || t.name;
                 const cmdStr = (t.metadata && t.metadata.short_cmd) || t.cmd || '';
 
                 if (t.id === 'focused') {
+                    tile.className = `bento-tile full-width ${isSelected ? 'active' : ''}`;
                     tile.innerHTML = `
                         <div class="tile-header">
                             <div class="tile-name-group">
@@ -1572,13 +1590,14 @@
                         <div class="tile-path">Active Window</div>
                     `;
                 } else {
+                    tile.className = `bento-tile ${isSelected ? 'active' : ''}`;
                     tile.innerHTML = `
                         <div class="tile-header">
                             <div class="tile-name-group">
                                 <div class="${dotClass}"></div>
                                 <span class="tile-title">${shortName}</span>
                             </div>
-                            <span class="tile-badge">${ttyStr.toUpperCase()}</span>
+                            ${ttyStr ? `<span class="tile-badge">${ttyStr.toUpperCase()}</span>` : ''}
                         </div>
                         <div class="tile-path">${compactPath}</div>
                         ${cmdStr ? `<div class="tile-cmd">${cmdStr}</div>` : ''}
