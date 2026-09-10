@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 
 export default function App() {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
-  const copyCommand = () => {
-    navigator.clipboard.writeText('python3 -m bridge.server');
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyText = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   return (
@@ -216,32 +216,65 @@ export default function App() {
           </div>
         </div>
 
-        {/* Start Daemon Command Snippet */}
-        <div
-          onClick={copyCommand}
-          style={{
-            background: '#141417',
-            border: '1px solid #27272a',
-            borderRadius: 10,
-            padding: '10px 14px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
-            fontSize: 12,
-            cursor: 'pointer',
-            transition: 'border-color 0.15s ease',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#52525b')}
-          onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#27272a')}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#22c55e' }}>$</span>
-            <span style={{ color: '#f4f4f5' }}>python3 -m bridge.server</span>
+        {/* Quick Start Command Chips */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Git Clone Chip */}
+          <div
+            onClick={() => copyText('git clone https://github.com/OmikAcharya/bridge.git', 'clone')}
+            style={{
+              background: '#141417',
+              border: '1px solid #27272a',
+              borderRadius: 10,
+              padding: '9px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+              fontSize: 11,
+              cursor: 'pointer',
+              transition: 'border-color 0.15s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#52525b')}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#27272a')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+              <span style={{ color: '#22c55e', flexShrink: 0 }}>$</span>
+              <span style={{ color: '#f4f4f5', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                git clone https://github.com/OmikAcharya/bridge
+              </span>
+            </div>
+            <span style={{ fontSize: 10.5, color: copied === 'clone' ? '#22c55e' : '#71717a', flexShrink: 0, marginLeft: 8 }}>
+              {copied === 'clone' ? 'Copied' : 'Copy'}
+            </span>
           </div>
-          <span style={{ fontSize: 11, color: copied ? '#22c55e' : '#71717a' }}>
-            {copied ? 'Copied' : 'Copy'}
-          </span>
+
+          {/* Start Daemon Command Snippet */}
+          <div
+            onClick={() => copyText('python3 -m bridge.server', 'run')}
+            style={{
+              background: '#141417',
+              border: '1px solid #27272a',
+              borderRadius: 10,
+              padding: '9px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+              fontSize: 11,
+              cursor: 'pointer',
+              transition: 'border-color 0.15s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#52525b')}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#27272a')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ color: '#22c55e' }}>$</span>
+              <span style={{ color: '#f4f4f5' }}>python3 -m bridge.server</span>
+            </div>
+            <span style={{ fontSize: 10.5, color: copied === 'run' ? '#22c55e' : '#71717a' }}>
+              {copied === 'run' ? 'Copied' : 'Copy'}
+            </span>
+          </div>
         </div>
       </div>
     </div>
