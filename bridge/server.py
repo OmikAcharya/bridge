@@ -192,6 +192,17 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", "15")
                 self.end_headers()
+            elif clean_path in ("/favicon.ico", "/favicon.svg", "/favicon.png", "/apple-touch-icon.png"):
+                static_file = HTML_PATH.parent / clean_path.lstrip("/")
+                if static_file.is_file():
+                    content_type = "image/svg+xml" if clean_path.endswith(".svg") else ("image/png" if clean_path.endswith(".png") else "image/x-icon")
+                    self.send_response(200)
+                    self._send_cors_headers()
+                    self.send_header("Content-Type", content_type)
+                    self.send_header("Content-Length", str(static_file.stat().st_size))
+                    self.send_header("Cache-Control", "public, max-age=86400")
+                    self.end_headers()
+                    return
             else:
                 self.send_response(200)
                 self._send_cors_headers()
@@ -221,6 +232,20 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
+
+            elif clean_path in ("/favicon.ico", "/favicon.svg", "/favicon.png", "/apple-touch-icon.png"):
+                static_file = HTML_PATH.parent / clean_path.lstrip("/")
+                if static_file.is_file():
+                    content_type = "image/svg+xml" if clean_path.endswith(".svg") else ("image/png" if clean_path.endswith(".png") else "image/x-icon")
+                    data = static_file.read_bytes()
+                    self.send_response(200)
+                    self._send_cors_headers()
+                    self.send_header("Content-Type", content_type)
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "public, max-age=86400")
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
 
             elif clean_path == "/targets":
                 if not self._is_authenticated():
