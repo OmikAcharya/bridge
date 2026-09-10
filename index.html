@@ -1573,6 +1573,7 @@
             cockpitPrompt.value = promptEl.value;
             autoResize(cockpitPrompt);
             fetchActivityTail();
+            scheduleNextTailFetch(0);
             haptic(10);
         }
 
@@ -1580,6 +1581,7 @@
             cockpitModal.classList.remove('open');
             promptEl.value = cockpitPrompt.value;
             updateMetrics();
+            scheduleNextTailFetch(2000);
             haptic(10);
         }
 
@@ -1587,29 +1589,52 @@
         closeCockpitBtn.addEventListener('click', closeCockpit);
         refreshCockpitBtn.addEventListener('click', () => {
             fetchActivityTail();
+            scheduleNextTailFetch(500);
             haptic(10);
         });
 
         let activityAbortController = null;
         let isTailFetching = false;
+        let lastKnownIsBusy = false;
+        let tailTimer = null;
+
+        function scheduleNextTailFetch(delay = null) {
+            if (tailTimer) clearTimeout(tailTimer);
+            if (delay === null) {
+                const isCockpitOpen = cockpitModal && cockpitModal.classList.contains('open');
+                if (isCockpitOpen) {
+                    delay = 750; // Ultra-responsive 750ms when viewing live terminal
+                } else if (lastKnownIsBusy) {
+                    delay = 900; // 900ms when agent is busy executing
+                } else {
+                    delay = 2000; // 2s background cadence
+                }
+            }
+            tailTimer = setTimeout(async () => {
+                await fetchActivityTail();
+                scheduleNextTailFetch();
+            }, delay);
+        }
 
         async function fetchActivityTail() {
             if (isTailFetching) return;
+            if (isP2P && !isP2PReady) return;
             isTailFetching = true;
 
-            if (activityAbortController) {
-                activityAbortController.abort();
-            }
-            activityAbortController = new AbortController();
-
             try {
-                const targetId = selectedTargetId;
-                let data = null;
+                let targetId = selectedTargetId;
+                // If user selected 'focused', route tail to active terminal/agent to show real output
+                if (targetId === 'focused') {
+                    const altTarget = availableTargets.find(t => t.id !== 'focused');
+                    targetId = altTarget ? altTarget.id : 'auto';
+                }
 
+                let data = null;
                 if (isP2P) {
-                    if (!isP2PReady) return;
-                    data = await p2pRequest('get_tail', { target: targetId, lines: 40 });
+                    data = await p2pRequest('get_tail', { target: targetId, lines: 40 }, 4000);
                 } else {
+                    if (activityAbortController) activityAbortController.abort();
+                    activityAbortController = new AbortController();
                     const res = await fetch(`/terminal/tail?target=${encodeURIComponent(targetId)}&lines=40`, {
                         cache: 'no-store',
                         signal: activityAbortController.signal
@@ -1618,10 +1643,8 @@
                     data = await res.json();
                 }
 
-                if (targetId !== selectedTargetId) return;
-
-                if (data && data.success && data.content) {
-                    cockpitActivityContent.textContent = data.content;
+                if (data && data.success) {
+                    lastKnownIsBusy = Boolean(data.is_busy);
                     if (data.is_busy) {
                         headerAgentDot.classList.add('busy');
                         cockpitAgentDot.classList.add('busy');
@@ -1631,13 +1654,26 @@
                         cockpitAgentDot.classList.remove('busy');
                         if (headerAgentStatus) headerAgentStatus.textContent = 'Live Log ↗';
                     }
+
                     if (getResolvedTarget()) {
                         updateActivityHeaderOptimistic();
                     } else if (data.target_name) {
                         cockpitTargetTitle.textContent = data.target_name;
                         headerAgentName.textContent = data.target_name;
                     }
-                    cockpitActivityContent.scrollTop = cockpitActivityContent.scrollHeight;
+
+                    if (data.content && data.content.trim()) {
+                        if (cockpitActivityContent.textContent !== data.content) {
+                            cockpitActivityContent.textContent = data.content;
+                            cockpitActivityContent.scrollTop = cockpitActivityContent.scrollHeight;
+                        }
+                    } else {
+                        if (selectedTargetId === 'focused') {
+                            cockpitActivityContent.innerHTML = '<div class="activity-empty"><div style="font-weight:600;margin-bottom:4px;">Focused Window Active</div><div style="opacity:0.75;font-size:12px;">Prompts paste to your active Mac window. Select an agent or shell terminal below to monitor live logs.</div></div>';
+                        } else {
+                            cockpitActivityContent.innerHTML = '<div class="activity-empty">Terminal session idle (no recent output).</div>';
+                        }
+                    }
                 }
             } catch (e) {
                 if (e.name === 'AbortError') return;
@@ -2169,7 +2205,7 @@
                     updateMetrics();
                 }
 
-                setTimeout(fetchActivityTail, 350);
+                scheduleNextTailFetch(150);
 
                 setTimeout(() => {
                     sendBtn.classList.remove('success');
@@ -2375,7 +2411,23 @@
             });
         }
 
-        // WebCrypto E2EE Authenticated Encryption (CTR-HMAC-SHA256)
+        function hexToBytes(hex) {
+            const bytes = new Uint8Array(hex.length >> 1);
+            for (let i = 0; i < hex.length; i += 2) {
+                bytes[i >> 1] = parseInt(hex.substring(i, i + 2), 16);
+            }
+            return bytes;
+        }
+
+        function bytesToHex(bytes) {
+            let hex = '';
+            for (let i = 0; i < bytes.length; i++) {
+                hex += bytes[i].toString(16).padStart(2, '0');
+            }
+            return hex;
+        }
+
+        // High-Performance WebCrypto E2EE Authenticated Encryption (CTR-HMAC-SHA256)
         class E2EECryptoClient {
             constructor(rawKey) {
                 this.rawKey = rawKey;
@@ -2402,18 +2454,21 @@
                 crypto.getRandomValues(nonce);
 
                 const numBlocks = Math.ceil(data.length / 32);
-                const ksChunks = [];
+                const blockPromises = [];
                 for (let i = 0; i < numBlocks; i++) {
                     const ctr = new Uint8Array(20);
                     ctr.set(nonce, 0);
                     new DataView(ctr.buffer).setUint32(16, i, false);
-                    const block = await crypto.subtle.sign('HMAC', this.kEnc, ctr);
-                    ksChunks.push(new Uint8Array(block));
+                    blockPromises.push(crypto.subtle.sign('HMAC', this.kEnc, ctr));
                 }
+                const ksChunks = await Promise.all(blockPromises);
 
                 const totalKs = new Uint8Array(numBlocks * 32);
                 let off = 0;
-                for (const c of ksChunks) { totalKs.set(c, off); off += c.length; }
+                for (const c of ksChunks) {
+                    totalKs.set(new Uint8Array(c), off);
+                    off += c.byteLength;
+                }
 
                 const ct = new Uint8Array(data.length);
                 for (let i = 0; i < data.length; i++) {
@@ -2424,40 +2479,41 @@
                 macInput.set(nonce, 0);
                 macInput.set(ct, nonce.length);
                 const tagBytes = await crypto.subtle.sign('HMAC', this.kMac, macInput);
-                const toHex = arr => Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
-                return { nonce: toHex(nonce), ct: toHex(ct), tag: toHex(new Uint8Array(tagBytes)) };
+                return { nonce: bytesToHex(nonce), ct: bytesToHex(ct), tag: bytesToHex(new Uint8Array(tagBytes)) };
             }
 
             async decrypt(envelope) {
                 await this.readyPromise;
                 const dec = new TextDecoder();
-                const nonce = Uint8Array.from(envelope.nonce.match(/../g), b => parseInt(b, 16));
-                const ct = Uint8Array.from(envelope.ct.match(/../g), b => parseInt(b, 16));
+                const nonce = hexToBytes(envelope.nonce);
+                const ct = hexToBytes(envelope.ct);
 
                 const macInput = new Uint8Array(nonce.length + ct.length);
                 macInput.set(nonce, 0);
                 macInput.set(ct, nonce.length);
                 const tagBytes = await crypto.subtle.sign('HMAC', this.kMac, macInput);
-                const toHex = arr => Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
-                const expectedTag = toHex(new Uint8Array(tagBytes));
+                const expectedTag = bytesToHex(new Uint8Array(tagBytes));
 
                 if (expectedTag !== envelope.tag) {
                     throw new Error('MAC verification failed - message tampered');
                 }
 
                 const numBlocks = Math.ceil(ct.length / 32);
-                const ksChunks = [];
+                const blockPromises = [];
                 for (let i = 0; i < numBlocks; i++) {
                     const ctr = new Uint8Array(20);
                     ctr.set(nonce, 0);
                     new DataView(ctr.buffer).setUint32(16, i, false);
-                    const block = await crypto.subtle.sign('HMAC', this.kEnc, ctr);
-                    ksChunks.push(new Uint8Array(block));
+                    blockPromises.push(crypto.subtle.sign('HMAC', this.kEnc, ctr));
                 }
+                const ksChunks = await Promise.all(blockPromises);
 
                 const totalKs = new Uint8Array(numBlocks * 32);
                 let off = 0;
-                for (const c of ksChunks) { totalKs.set(c, off); off += c.length; }
+                for (const c of ksChunks) {
+                    totalKs.set(new Uint8Array(c), off);
+                    off += c.byteLength;
+                }
 
                 const pt = new Uint8Array(ct.length);
                 for (let i = 0; i < ct.length; i++) {
@@ -2939,11 +2995,10 @@
             if (!isP2P) {
                 fetchTargets(true);
                 ping();
-                fetchActivityTail();
             }
             setInterval(ping, 4000);
             setInterval(() => fetchTargets(false), 5000);
-            setInterval(fetchActivityTail, 2500);
+            scheduleNextTailFetch(300);
         }
 
         function routeInit() {
