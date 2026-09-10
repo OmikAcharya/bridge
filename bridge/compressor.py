@@ -22,5 +22,7 @@ def format_raw_tail(raw_text: str, lines: int = 35) -> str:
     """Formats raw terminal output for clean display on mobile."""
     cleaned = clean_ansi(raw_text)
     all_lines = cleaned.splitlines()
+    while all_lines and not all_lines[-1].strip():
+        all_lines.pop()
     tail = all_lines[-lines:] if len(all_lines) > lines else all_lines
     return "\n".join(tail)

@@ -297,6 +297,11 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                     lines_count = 40
 
                 target = self.target_manager.resolve(target_id) if self.target_manager else None
+                if target and target.id == "focused":
+                    alt_target = self.target_manager.resolve("auto") if self.target_manager else None
+                    if alt_target and alt_target.id != "focused":
+                        target = alt_target
+
                 if not target:
                     err_payload = json.dumps({"success": False, "error": f"Target '{target_id}' not found."}).encode("utf-8")
                     self.send_response(404)

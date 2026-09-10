@@ -288,6 +288,8 @@ class AppleTerminalAdapter(TerminalAdapter):
             res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=3.0)
             if res.returncode == 0 and res.stdout:
                 raw_lines = res.stdout.splitlines()
+                while raw_lines and not raw_lines[-1].strip():
+                    raw_lines.pop()
                 return "\n".join(raw_lines[-lines:])
         except Exception:
             pass

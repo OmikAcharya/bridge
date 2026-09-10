@@ -594,6 +594,11 @@ class P2PManager:
                 lines_count = int(req.get("lines", 40))
 
                 target = target_manager.resolve(target_id) if target_manager else None
+                if target and target.id == "focused":
+                    alt_target = target_manager.resolve("auto") if target_manager else None
+                    if alt_target and alt_target.id != "focused":
+                        target = alt_target
+
                 if not target:
                     response_payload = {
                         "id": req_id,
