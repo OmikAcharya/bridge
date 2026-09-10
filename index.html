@@ -1839,7 +1839,7 @@
             return target.tty.replace('/dev/', '');
         }
 
-        function getTargetDisplayInfo(t) {
+        function getTargetDisplayInfo(t, targetsList) {
             if (!t) {
                 return {
                     title: 'Offline',
@@ -1849,7 +1849,11 @@
                     badge: 'OFFLINE',
                     cmd: '',
                     bannerName: 'No Target',
-                    subtitle: 'No terminal target'
+                    subtitle: 'No terminal target',
+                    hasCollision: false,
+                    instanceIndex: 1,
+                    instanceTotal: 1,
+                    locTag: ''
                 };
             }
             if (t.id === 'focused') {
@@ -1861,7 +1865,11 @@
                     badge: 'MAC',
                     cmd: '',
                     bannerName: 'Mac · Active Window',
-                    subtitle: 'Active application on Mac'
+                    subtitle: 'Active application on Mac',
+                    hasCollision: false,
+                    instanceIndex: 1,
+                    instanceTotal: 1,
+                    locTag: ''
                 };
             }
 
@@ -1870,19 +1878,64 @@
             const path = getTargetCompactPath(t);
             const tty = getTargetTty(t);
 
-            // Primary title: prominently the project folder / repository name!
-            const title = project || agent || t.name || 'Terminal';
+            const pool = Array.isArray(targetsList) ? targetsList : (availableTargets || []);
+            // Identify sibling targets that share the same agent and directory/project
+            const siblings = pool.filter(item => {
+                if (!item || item.id === 'focused') return false;
+                const a = compressAgentName(item.agent_name, item.agent);
+                const p = getTargetProject(item);
+                return a === agent && p === project;
+            });
 
-            // Badge: e.g. "AGY · ttys002" or "AGY"
-            const badge = tty ? `${agent} · ${tty}` : agent;
+            const hasCollision = siblings.length > 1;
+            let instanceIndex = 1;
+            if (t.metadata && t.metadata.instance_index) {
+                instanceIndex = t.metadata.instance_index;
+            } else if (hasCollision) {
+                const sIdx = siblings.findIndex(s => s.id === t.id);
+                if (sIdx !== -1) instanceIndex = sIdx + 1;
+            }
+            const instanceTotal = (t.metadata && t.metadata.instance_total) || (hasCollision ? siblings.length : 1);
+
+            // Window and tab location tag if available
+            let locTag = '';
+            if (t.win_idx) {
+                locTag = `Win ${t.win_idx}`;
+                if (t.tab_idx && t.tab_idx > 1) {
+                    locTag += `, Tab ${t.tab_idx}`;
+                }
+            }
+
+            // Primary title: prominently the project folder / repository name!
+            // When colliding on same project, append the instance number: e.g. "bridge · #1", "bridge · #2"
+            let title = project || agent || t.name || 'Terminal';
+            if (hasCollision && project) {
+                title = `${project} · #${instanceIndex}`;
+            }
+
+            // Badge: e.g. "AGY #1 · ttys002" or "AGY · ttys002"
+            let badge = '';
+            if (hasCollision) {
+                badge = tty ? `${agent} #${instanceIndex} · ${tty}` : `${agent} #${instanceIndex}`;
+            } else {
+                badge = tty ? `${agent} · ${tty}` : agent;
+            }
 
             // Command (omit if redundant with agent or shell)
             const rawCmd = (t.metadata && t.metadata.short_cmd) || '';
             const cmd = (rawCmd && rawCmd.toLowerCase() !== agent.toLowerCase() && rawCmd.toLowerCase() !== 'terminal' && rawCmd.toLowerCase() !== 'zsh' && rawCmd.toLowerCase() !== 'bash') ? rawCmd : '';
 
             // Clean banner & subtitle display names
-            const bannerName = project ? `${agent} · ${project}` : (path !== '~' ? `${agent} · ${path}` : `${agent} (~)`);
-            const subtitle = project ? `${agent} · ${project}` : `${agent} (${path})`;
+            let bannerName = '';
+            let subtitle = '';
+            if (hasCollision) {
+                const idTag = tty ? ` (${tty})` : '';
+                bannerName = `${agent} #${instanceIndex} · ${project || path}${idTag}`;
+                subtitle = `${agent} #${instanceIndex} · ${project || path}${idTag}`;
+            } else {
+                bannerName = project ? `${agent} · ${project}` : (path !== '~' ? `${agent} · ${path}` : `${agent} (~)`);
+                subtitle = project ? `${agent} · ${project}` : `${agent} (${path})`;
+            }
 
             return {
                 title,
@@ -1893,13 +1946,18 @@
                 badge,
                 cmd,
                 bannerName,
-                subtitle
+                subtitle,
+                hasCollision,
+                instanceIndex,
+                instanceTotal,
+                locTag
             };
         }
 
         function getResolvedTarget() {
             if (selectedTargetId === 'auto') {
-                return availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') ||
+                return availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused' && !t.is_busy) ||
+                       availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') ||
                        availableTargets.find(t => t.id !== 'focused') ||
                        availableTargets[0] || null;
             }
@@ -1910,7 +1968,8 @@
             bentoGrid.innerHTML = '';
 
             // 1. Auto Tile (Full width on top)
-            const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') ||
+            const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused' && !t.is_busy) ||
+                                 availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') ||
                                  availableTargets.find(t => t.id !== 'focused') ||
                                  availableTargets[0];
             const autoTile = document.createElement('div');
@@ -1919,10 +1978,13 @@
             let autoRouteText = 'Searching for active agents...';
             let autoBadgeText = 'AUTO';
             if (autoResolved) {
-                const autoInfo = getTargetDisplayInfo(autoResolved);
-                autoBadgeText = `AUTO · ${autoInfo.agent}`;
-                const autoRouteTarget = autoInfo.project ? `${autoInfo.project} · ${autoInfo.agent}` : autoInfo.agent;
-                autoRouteText = `Routing to ${autoRouteTarget}${autoInfo.path ? ' (' + autoInfo.path + ')' : ''}`;
+                const autoInfo = getTargetDisplayInfo(autoResolved, availableTargets);
+                autoBadgeText = autoInfo.hasCollision ? `AUTO · ${autoInfo.agent} #${autoInfo.instanceIndex}` : `AUTO · ${autoInfo.agent}`;
+                const autoRouteTarget = autoInfo.hasCollision
+                    ? `${autoInfo.project} #${autoInfo.instanceIndex} · ${autoInfo.agent}`
+                    : (autoInfo.project ? `${autoInfo.project} · ${autoInfo.agent}` : autoInfo.agent);
+                const autoIdTag = autoInfo.hasCollision && autoInfo.tty ? ` [${autoInfo.tty}]` : '';
+                autoRouteText = `Routing to ${autoRouteTarget}${autoIdTag}${autoInfo.path ? ' (' + autoInfo.path + ')' : ''}`;
             }
 
             autoTile.innerHTML = `
@@ -1944,7 +2006,7 @@
                 const isSelected = (selectedTargetId === t.id);
                 const isBusy = (t.status === 'busy' || t.is_busy);
                 const dotClass = isBusy ? 'tile-dot busy' : 'tile-dot';
-                const info = getTargetDisplayInfo(t);
+                const info = getTargetDisplayInfo(t, availableTargets);
 
                 if (t.id === 'focused') {
                     tile.className = `bento-tile full-width ${isSelected ? 'active' : ''}`;
@@ -1960,7 +2022,7 @@
                     `;
                 } else {
                     tile.className = `bento-tile ${isSelected ? 'active' : ''}`;
-                    tile.title = `${t.display_name || info.title} (${info.path})`;
+                    tile.title = `${t.display_name || info.title} (${info.path})${info.locTag ? ' [' + info.locTag + ']' : ''}`;
                     tile.innerHTML = `
                         <div class="tile-header">
                             <div class="tile-name-group">
@@ -1969,7 +2031,7 @@
                             </div>
                             <span class="tile-badge">${info.badge}</span>
                         </div>
-                        <div class="tile-path">${info.path}</div>
+                        <div class="tile-path">${info.path}${info.locTag ? ' · ' + info.locTag : ''}</div>
                         ${info.cmd ? `<div class="tile-cmd">${info.cmd}</div>` : ''}
                     `;
                 }
@@ -1993,16 +2055,18 @@
             }
 
             if (resolved) {
-                const info = getTargetDisplayInfo(resolved);
+                const info = getTargetDisplayInfo(resolved, availableTargets);
                 sendTitle.textContent = 'Send Prompt';
                 if (selectedTargetId === 'auto') {
                     sendSubtitle.textContent = `Auto → ${info.subtitle}`;
-                    miniTargetName.textContent = `Auto · ${info.title}`;
+                    miniTargetName.textContent = info.hasCollision ? `Auto · ${info.agent} #${info.instanceIndex}` : `Auto · ${info.title}`;
                 } else {
                     sendSubtitle.textContent = `Route to ${info.subtitle}`;
-                    miniTargetName.textContent = `${info.agent} · ${info.title}`;
+                    miniTargetName.textContent = info.hasCollision ? `${info.agent} #${info.instanceIndex} · ${info.project}` : `${info.agent} · ${info.title}`;
                 }
-                miniTargetPath.textContent = info.path || resolved.tty || '--';
+                miniTargetPath.textContent = info.hasCollision && info.tty
+                    ? `${info.path} (${info.tty}${info.locTag ? ' · ' + info.locTag : ''})`
+                    : (info.path || resolved.tty || '--');
             } else {
                 sendTitle.textContent = 'Send Prompt';
                 sendSubtitle.textContent = 'No terminal target';
@@ -2014,7 +2078,7 @@
         function updateActivityHeaderOptimistic() {
             const resolved = getResolvedTarget();
             if (resolved) {
-                const info = getTargetDisplayInfo(resolved);
+                const info = getTargetDisplayInfo(resolved, availableTargets);
                 let displayTitle = '';
                 if (selectedTargetId === 'focused') {
                     displayTitle = 'Mac · Active Window';
@@ -2114,7 +2178,7 @@
                 }
 
                 const newSignature = JSON.stringify(availableTargets.map(t => [
-                    t.id, t.name, t.folder, t.status, t.is_busy, t.cwd, t.cmd, t.tty
+                    t.id, t.name, t.folder, t.status, t.is_busy, t.cwd, t.cmd, t.tty, t.win_idx, t.tab_idx, (t.metadata && t.metadata.instance_index)
                 ]));
 
                 if (!force && newSignature === lastSignature) {
