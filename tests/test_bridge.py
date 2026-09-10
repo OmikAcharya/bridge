@@ -200,6 +200,87 @@ class TestTargetManager(unittest.TestCase):
         res_none = self.target_manager.resolve("non_existent_target")
         self.assertIsNone(res_none)
 
+    def test_duplicate_target_discovery_disambiguation(self):
+        discovery = SessionDiscovery()
+        with patch.object(discovery, "_discover_apple_terminal") as mock_tabs, \
+             patch.object(discovery, "_discover_iterm") as mock_iterm, \
+             patch.object(discovery, "_discover_processes_by_tty") as mock_procs:
+
+            mock_tabs.return_value = {
+                "/dev/ttys006": {
+                    "app": "Terminal", "win_idx": 9, "tab_idx": 1,
+                    "tty": "/dev/ttys006", "selected": True, "busy": True,
+                    "procs": ["zsh", "agy"], "win_name": "bridge — agy"
+                },
+                "/dev/ttys007": {
+                    "app": "Terminal", "win_idx": 10, "tab_idx": 1,
+                    "tty": "/dev/ttys007", "selected": False, "busy": False,
+                    "procs": ["zsh", "agy"], "win_name": "bridge — agy"
+                }
+            }
+            mock_iterm.return_value = {}
+            mock_procs.return_value = {
+                "/dev/ttys006": [
+                    {"pid": 201, "ppid": 200, "cmd": "-zsh", "cwd": "/Users/mac/Developer/bridge"},
+                    {"pid": 202, "ppid": 201, "cmd": "agy", "cwd": "/Users/mac/Developer/bridge"}
+                ],
+                "/dev/ttys007": [
+                    {"pid": 301, "ppid": 300, "cmd": "-zsh", "cwd": "/Users/mac/Developer/bridge"},
+                    {"pid": 302, "ppid": 301, "cmd": "agy", "cwd": "/Users/mac/Developer/bridge"}
+                ]
+            }
+
+            targets = discovery.get_active_targets(force_refresh=True)
+            self.assertEqual(len(targets), 2)
+            t1, t2 = targets[0], targets[1]
+
+            # IDs maintain stable backward-compatible numbering
+            self.assertEqual(t1.id, "agy-bridge")
+            self.assertEqual(t2.id, "agy-bridge-2")
+
+            # Names and metadata are disambiguated
+            self.assertEqual(t1.name, "Antigravity — bridge #1")
+            self.assertEqual(t2.name, "Antigravity — bridge #2")
+            self.assertEqual(t1.metadata["instance_index"], 1)
+            self.assertEqual(t2.metadata["instance_index"], 2)
+            self.assertEqual(t1.metadata["instance_total"], 2)
+            self.assertEqual(t2.metadata["instance_total"], 2)
+
+    def test_duplicate_target_resolution_prefers_idle(self):
+        t1 = Target(
+            id="agy-bridge",
+            name="Antigravity — bridge #1",
+            display_name="Antigravity #1 — bridge",
+            agent="agy",
+            agent_name="Antigravity",
+            cwd="/Users/mac/Developer/bridge",
+            folder="bridge",
+            tty="/dev/ttys006",
+            status="busy",
+            is_busy=True
+        )
+        t2 = Target(
+            id="agy-bridge-2",
+            name="Antigravity — bridge #2",
+            display_name="Antigravity #2 — bridge",
+            agent="agy",
+            agent_name="Antigravity",
+            cwd="/Users/mac/Developer/bridge",
+            folder="bridge",
+            tty="/dev/ttys007",
+            status="ready",
+            is_busy=False
+        )
+        self.discovery.get_active_targets.return_value = [t1, t2]
+
+        # Resolving by exact name
+        self.assertEqual(self.target_manager.resolve("Antigravity — bridge #2").id, "agy-bridge-2")
+        # Resolving auto should prefer idle t2 over busy t1
+        self.assertEqual(self.target_manager.resolve("auto").id, "agy-bridge-2")
+        # Resolving by folder "bridge" should prefer idle t2 over busy t1
+        self.assertEqual(self.target_manager.resolve("bridge").id, "agy-bridge-2")
+
+
 
 class TestAdaptersAndEscaping(unittest.TestCase):
     def test_escape_for_applescript(self):

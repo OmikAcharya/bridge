@@ -573,7 +573,7 @@ class P2PManager:
                     if td.get("metadata"):
                         td["metadata"] = {
                             k: v for k, v in td["metadata"].items()
-                            if k in ("compact_cwd", "short_cmd", "tty_short", "alias_id")
+                            if k in ("compact_cwd", "short_cmd", "tty_short", "alias_id", "win_name", "instance_index", "instance_total")
                         }
                     targets_dict.append(td)
                 default_t = "auto"

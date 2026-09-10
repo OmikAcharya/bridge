@@ -230,6 +230,27 @@ class SessionDiscovery:
             )
             sessions_map[tty] = session
 
+        # Disambiguate targets that share the same base key (agent and folder/cwd)
+        group_counts: Dict[str, int] = {}
+        for t in targets:
+            key = f"{t.agent}:{t.folder or t.cwd or t.metadata.get('compact_cwd', '') or t.name}"
+            group_counts[key] = group_counts.get(key, 0) + 1
+
+        group_indices: Dict[str, int] = {}
+        for t in targets:
+            key = f"{t.agent}:{t.folder or t.cwd or t.metadata.get('compact_cwd', '') or t.name}"
+            total = group_counts.get(key, 1)
+            if total > 1:
+                idx = group_indices.get(key, 0) + 1
+                group_indices[key] = idx
+                t.metadata["instance_index"] = idx
+                t.metadata["instance_total"] = total
+                compact = t.metadata.get("compact_cwd", "")
+                t_label = t.folder or compact
+                t_short = t.metadata.get("tty_short", "")
+                t.name = f"{t.agent_name} — {t_label} #{idx}"
+                t.display_name = f"{t.agent_name} #{idx} — {compact or t_label} [{t_short}]"
+
         return targets, sessions_map
 
     def _discover_apple_terminal(self) -> Dict[str, Dict[str, Any]]:
