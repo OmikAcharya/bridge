@@ -1101,12 +1101,216 @@
         .history-card:active {
             background: var(--surface-hover);
         }
+
+        /* Landing View Container & Components */
+        .landing-view {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 100vh;
+            padding: 24px 16px;
+            box-sizing: border-box;
+        }
+
+        .landing-container {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-sizing: border-box;
+        }
+
+        .landing-chips-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .landing-agent-chip {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 500;
+            color: #a1a1aa;
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 8px;
+            padding: 4px 10px;
+        }
+
+        .landing-cmd-chip {
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 10px;
+            padding: 9px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            cursor: pointer;
+            transition: border-color 0.15s ease;
+            user-select: none;
+        }
+
+        .landing-cmd-chip:hover {
+            border-color: #52525b;
+        }
+
+        .landing-cmd-chip:active {
+            transform: scale(0.99);
+        }
+
+        .landing-cmd-left {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+        }
+
+        .landing-cmd-prefix {
+            color: var(--green);
+            flex-shrink: 0;
+        }
+
+        .landing-cmd-text {
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .landing-cmd-copy {
+            font-size: 10.5px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            margin-left: 8px;
+        }
+
+        .landing-cmd-copy.copied {
+            color: var(--green);
+        }
+
+        .landing-launch-btn {
+            background: transparent;
+            border: 1px solid var(--surface-border);
+            border-radius: 10px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            margin-top: 2px;
+        }
+
+        .landing-launch-btn:hover {
+            color: var(--text-main);
+            border-color: #52525b;
+            background: var(--surface);
+        }
+
+        .client-view {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
     </style>
 </head>
 <body>
 
-    <!-- Top Bar -->
-    <header>
+    <!-- Minimal Lander View (Shown on base URL / when no P2P metadata is present) -->
+    <div id="landingView" class="landing-view" style="display: none;">
+        <div class="landing-container">
+            <!-- Header -->
+            <header style="display: flex; align-items: center; justify-content: space-between; padding: 2px 0 4px 0; border-bottom: none; margin-bottom: 0;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="conn-status-dot"></div>
+                    <span style="font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-main);">
+                        Prompt Bridge
+                    </span>
+                </div>
+                <div class="conn-badge p2p" style="font-size: 9.5px; padding: 2px 7px;">
+                    <span class="badge-dot"></span> P2P E2EE
+                </div>
+            </header>
+
+            <!-- Status Banner -->
+            <div class="conn-status-banner">
+                <div class="conn-status-dot"></div>
+                <div>
+                    <div class="conn-status-title">P2P Encrypted Tunnel</div>
+                    <div class="conn-status-sub">Direct End-to-End Encrypted Relay</div>
+                </div>
+            </div>
+
+            <!-- Target Support Chips -->
+            <div class="landing-chips-row">
+                <span class="landing-agent-chip">AGY</span>
+                <span class="landing-agent-chip">Claude</span>
+                <span class="landing-agent-chip">Codex</span>
+                <span class="landing-agent-chip">OpenCode</span>
+                <span class="landing-agent-chip">Zsh</span>
+            </div>
+
+            <!-- Connection Details List -->
+            <div class="conn-details-list">
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Security</span>
+                    <span class="conn-detail-value mono">CTR-HMAC-SHA256 (E2EE)</span>
+                </div>
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Relay Broker</span>
+                    <span class="conn-detail-value mono">broker.emqx.io:8084</span>
+                </div>
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Injection Method</span>
+                    <span class="conn-detail-value mono">os.write(master_fd)</span>
+                </div>
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Daemon Port</span>
+                    <span class="conn-detail-value mono">127.0.0.1:8765</span>
+                </div>
+            </div>
+
+            <!-- Quick Start Command Chips -->
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div id="landingCloneChip" class="landing-cmd-chip" title="Click to copy clone command">
+                    <div class="landing-cmd-left">
+                        <span class="landing-cmd-prefix">$</span>
+                        <span class="landing-cmd-text">git clone https://github.com/OmikAcharya/bridge</span>
+                    </div>
+                    <span id="landingCloneCopy" class="landing-cmd-copy">Copy</span>
+                </div>
+
+                <div id="landingDaemonChip" class="landing-cmd-chip" title="Click to copy run command">
+                    <div class="landing-cmd-left">
+                        <span class="landing-cmd-prefix">$</span>
+                        <span class="landing-cmd-text">python3 -m bridge.server</span>
+                    </div>
+                    <span id="landingDaemonCopy" class="landing-cmd-copy">Copy</span>
+                </div>
+            </div>
+
+            <!-- Launch / Open Cockpit Button -->
+            <button id="landingLaunchBtn" class="landing-launch-btn" type="button">
+                <span>Open Terminal Cockpit</span>
+                <span style="font-size: 11px;">↗</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Connected P2P Client View -->
+    <div id="clientView" class="client-view">
+        <!-- Top Bar -->
+        <header>
         <div class="title-group">
             <div id="statusDot" class="status-dot"></div>
             <span class="title">Prompt Bridge</span>
@@ -1264,6 +1468,7 @@
             <span id="sendSubtitle" class="send-btn-target">to Active Agent</span>
         </button>
     </div>
+    </div> <!-- /clientView -->
 
     <!-- History Bottom Sheet -->
     <div id="historyModal" class="modal-overlay">
@@ -2085,11 +2290,22 @@
 
         // Connection Security & Mode Indicator
         const connBadge = document.getElementById('connBadge');
-        const urlParams = new URLSearchParams(window.location.search);
-        const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
-        const p2pRoom = hashParams.get('room') || urlParams.get('room');
-        const p2pKey = hashParams.get('key') || urlParams.get('key');
-        const isP2P = Boolean(p2pRoom) || window.location.hostname.includes('github.io');
+        function getP2PMetadata() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+            const room = hashParams.get('room') || urlParams.get('room');
+            const key = hashParams.get('key') || urlParams.get('key');
+            return {
+                room: room ? room.trim() : '',
+                key: key ? key.trim() : '',
+                hasMetadata: Boolean(room && key)
+            };
+        }
+
+        let p2pMetadata = getP2PMetadata();
+        let p2pRoom = p2pMetadata.room;
+        let p2pKey = p2pMetadata.key;
+        let isP2P = p2pMetadata.hasMetadata;
 
         let mqttClient = null;
         let isP2PReady = false;
@@ -2537,18 +2753,89 @@
             }
         } catch (e) {}
 
-        updateViewportHeight();
-        if (isP2P && p2pRoom && p2pKey) {
-            initP2PRelay(p2pRoom, p2pKey);
-        } else {
-            fetchTargets(true);
+        // Copy command handlers for landing page
+        function copyLandingText(text, copyEl) {
+            navigator.clipboard.writeText(text).then(() => {
+                if (copyEl) {
+                    copyEl.textContent = 'Copied';
+                    copyEl.classList.add('copied');
+                    setTimeout(() => {
+                        copyEl.textContent = 'Copy';
+                        copyEl.classList.remove('copied');
+                    }, 2000);
+                }
+            }).catch(() => {});
         }
-        ping();
-        fetchActivityTail();
-        setInterval(ping, 4000);
-        setInterval(() => fetchTargets(false), 5000);
-        setInterval(fetchActivityTail, 2500);
-        updateMetrics();
+
+        const landingCloneChip = document.getElementById('landingCloneChip');
+        const landingCloneCopy = document.getElementById('landingCloneCopy');
+        if (landingCloneChip) {
+            landingCloneChip.addEventListener('click', () => {
+                copyLandingText('git clone https://github.com/OmikAcharya/bridge.git', landingCloneCopy);
+            });
+        }
+
+        const landingDaemonChip = document.getElementById('landingDaemonChip');
+        const landingDaemonCopy = document.getElementById('landingDaemonCopy');
+        if (landingDaemonChip) {
+            landingDaemonChip.addEventListener('click', () => {
+                copyLandingText('python3 -m bridge.server', landingDaemonCopy);
+            });
+        }
+
+        const landingLaunchBtn = document.getElementById('landingLaunchBtn');
+        if (landingLaunchBtn) {
+            landingLaunchBtn.addEventListener('click', () => {
+                const landingViewEl = document.getElementById('landingView');
+                const clientViewEl = document.getElementById('clientView');
+                if (landingViewEl) landingViewEl.style.display = 'none';
+                if (clientViewEl) clientViewEl.style.display = 'flex';
+                startLocalPolling();
+            });
+        }
+
+        let pollingIntervalsStarted = false;
+        function startLocalPolling() {
+            if (pollingIntervalsStarted) return;
+            pollingIntervalsStarted = true;
+            fetchTargets(true);
+            ping();
+            fetchActivityTail();
+            setInterval(ping, 4000);
+            setInterval(() => fetchTargets(false), 5000);
+            setInterval(fetchActivityTail, 2500);
+        }
+
+        function routeInit() {
+            updateViewportHeight();
+            const meta = getP2PMetadata();
+            p2pRoom = meta.room;
+            p2pKey = meta.key;
+            isP2P = meta.hasMetadata;
+
+            const landingViewEl = document.getElementById('landingView');
+            const clientViewEl = document.getElementById('clientView');
+
+            if (isP2P) {
+                // Connected route with P2P metadata: show client and activate tunnel
+                if (landingViewEl) landingViewEl.style.display = 'none';
+                if (clientViewEl) clientViewEl.style.display = 'flex';
+                initP2PRelay(p2pRoom, p2pKey);
+            } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.search.includes('client=1')) {
+                // Local loopback daemon or explicit client query: show client and poll daemon
+                if (landingViewEl) landingViewEl.style.display = 'none';
+                if (clientViewEl) clientViewEl.style.display = 'flex';
+                startLocalPolling();
+            } else {
+                // Base URL / on GitHub Pages or external host without P2P metadata: show minimal lander!
+                if (landingViewEl) landingViewEl.style.display = 'flex';
+                if (clientViewEl) clientViewEl.style.display = 'none';
+            }
+            updateMetrics();
+        }
+
+        routeInit();
+        window.addEventListener('hashchange', routeInit);
     </script>
 </body>
 </html>
