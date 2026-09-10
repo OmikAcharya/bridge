@@ -390,11 +390,13 @@ class P2PManager:
         self.relay_client: Optional[MiniMQTTClient] = None
         self.worker_thread: Optional[threading.Thread] = None
         self.running = False
+        self.active_broker_idx = 0
 
     def generate_p2p_url(self) -> str:
         """Constructs secure P2P pairing URL pointing to the hosted static web client."""
         ts = int(time.time())
-        return f"{self.client_url}/?v={ts}#p2p=1&room={self.room_id}&key={self.auth_key}"
+        broker_idx = getattr(self, "active_broker_idx", 0)
+        return f"{self.client_url}/?v={ts}#p2p=1&room={self.room_id}&key={self.auth_key}&broker={broker_idx}"
 
     def generate_lan_url(self, lan_ip: str, port: int) -> str:
         """Constructs direct local LAN URL when --expose-lan is explicitly enabled."""
@@ -463,7 +465,9 @@ class P2PManager:
     def _relay_loop(self, router, target_manager):
         topic_mac = f"pb/{self.room_id}/mac"
         topic_phone = f"pb/{self.room_id}/phone"
-        broker_idx = 0
+        broker_idx = getattr(self, "active_broker_idx", 0)
+        active_broker_idx = broker_idx
+        consecutive_errors = 0
 
         while self.running:
             entry = DEFAULT_MQTT_BROKERS[broker_idx % len(DEFAULT_MQTT_BROKERS)]
@@ -487,6 +491,9 @@ class P2PManager:
                 client.connect()
                 client.subscribe(topic_mac)
                 self.relay_client = client
+                self.active_broker_idx = broker_idx
+                active_broker_idx = broker_idx
+                consecutive_errors = 0
                 logger.info("Connected to P2P relay broker %s for room %s", host, self.room_id)
 
                 last_ping = time.time()
@@ -506,7 +513,12 @@ class P2PManager:
 
             except Exception as e:
                 logger.debug("P2P relay loop (%s) reconnecting: %s", host, e)
-                broker_idx += 1
+                consecutive_errors += 1
+                if consecutive_errors >= 3:
+                    broker_idx = (broker_idx + 1) % len(DEFAULT_MQTT_BROKERS)
+                    consecutive_errors = 0
+                else:
+                    broker_idx = active_broker_idx
                 time.sleep(2.0)
             finally:
                 if client:
