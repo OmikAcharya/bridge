@@ -378,34 +378,43 @@
             font-family: var(--font-mono);
             font-size: 9px;
             font-weight: 600;
-            padding: 2px 5px;
+            padding: 2px 6px;
             border-radius: 4px;
             background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
+            letter-spacing: 0.02em;
             flex-shrink: 0;
             margin-left: auto;
+            white-space: nowrap;
+        }
+
+        .bento-tile.active .tile-badge {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+            color: var(--text-main);
         }
 
         .tile-path {
             font-family: var(--font-mono);
-            font-size: 11px;
+            font-size: 10.5px;
             color: var(--text-muted);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             min-width: 0;
+            line-height: 1.3;
         }
 
         .tile-cmd {
             font-family: var(--font-mono);
-            font-size: 10px;
+            font-size: 9.5px;
             color: var(--text-dim);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             min-width: 0;
+            line-height: 1.2;
         }
 
         /* Keyboard Active Mini Session Bar */
@@ -513,7 +522,19 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 160px;
+            max-width: 180px;
+        }
+
+        @media (min-width: 480px) {
+            .banner-agent-name {
+                max-width: 280px;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .banner-hint {
+                display: none;
+            }
         }
 
         .banner-status-tag {
@@ -830,7 +851,13 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 150px;
+            max-width: 200px;
+        }
+
+        @media (min-width: 480px) {
+            .cockpit-target-title {
+                max-width: 320px;
+            }
         }
 
         .cockpit-header-actions {
@@ -1074,12 +1101,216 @@
         .history-card:active {
             background: var(--surface-hover);
         }
+
+        /* Landing View Container & Components */
+        .landing-view {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 100vh;
+            padding: 24px 16px;
+            box-sizing: border-box;
+        }
+
+        .landing-container {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-sizing: border-box;
+        }
+
+        .landing-chips-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .landing-agent-chip {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 500;
+            color: #a1a1aa;
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 8px;
+            padding: 4px 10px;
+        }
+
+        .landing-cmd-chip {
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 10px;
+            padding: 9px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            cursor: pointer;
+            transition: border-color 0.15s ease;
+            user-select: none;
+        }
+
+        .landing-cmd-chip:hover {
+            border-color: #52525b;
+        }
+
+        .landing-cmd-chip:active {
+            transform: scale(0.99);
+        }
+
+        .landing-cmd-left {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+        }
+
+        .landing-cmd-prefix {
+            color: var(--green);
+            flex-shrink: 0;
+        }
+
+        .landing-cmd-text {
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .landing-cmd-copy {
+            font-size: 10.5px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            margin-left: 8px;
+        }
+
+        .landing-cmd-copy.copied {
+            color: var(--green);
+        }
+
+        .landing-launch-btn {
+            background: transparent;
+            border: 1px solid var(--surface-border);
+            border-radius: 10px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            margin-top: 2px;
+        }
+
+        .landing-launch-btn:hover {
+            color: var(--text-main);
+            border-color: #52525b;
+            background: var(--surface);
+        }
+
+        .client-view {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
     </style>
 </head>
 <body>
 
-    <!-- Top Bar -->
-    <header>
+    <!-- Minimal Lander View (Shown on base URL / when no P2P metadata is present) -->
+    <div id="landingView" class="landing-view" style="display: none;">
+        <div class="landing-container">
+            <!-- Header -->
+            <header style="display: flex; align-items: center; justify-content: space-between; padding: 2px 0 4px 0; border-bottom: none; margin-bottom: 0;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="conn-status-dot"></div>
+                    <span style="font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-main);">
+                        Prompt Bridge
+                    </span>
+                </div>
+                <div class="conn-badge p2p" style="font-size: 9.5px; padding: 2px 7px;">
+                    <span class="badge-dot"></span> P2P E2EE
+                </div>
+            </header>
+
+            <!-- Status Banner -->
+            <div class="conn-status-banner">
+                <div class="conn-status-dot"></div>
+                <div>
+                    <div class="conn-status-title">P2P Encrypted Tunnel</div>
+                    <div class="conn-status-sub">Direct End-to-End Encrypted Relay</div>
+                </div>
+            </div>
+
+            <!-- Target Support Chips -->
+            <div class="landing-chips-row">
+                <span class="landing-agent-chip">AGY</span>
+                <span class="landing-agent-chip">Claude</span>
+                <span class="landing-agent-chip">Codex</span>
+                <span class="landing-agent-chip">OpenCode</span>
+                <span class="landing-agent-chip">Zsh</span>
+            </div>
+
+            <!-- Connection Details List -->
+            <div class="conn-details-list">
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Security</span>
+                    <span class="conn-detail-value mono">CTR-HMAC-SHA256 (E2EE)</span>
+                </div>
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Relay Broker</span>
+                    <span class="conn-detail-value mono">broker.emqx.io:8084</span>
+                </div>
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Injection Method</span>
+                    <span class="conn-detail-value mono">os.write(master_fd)</span>
+                </div>
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Daemon Port</span>
+                    <span class="conn-detail-value mono">127.0.0.1:8765</span>
+                </div>
+            </div>
+
+            <!-- Quick Start Command Chips -->
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div id="landingCloneChip" class="landing-cmd-chip" title="Click to copy clone command">
+                    <div class="landing-cmd-left">
+                        <span class="landing-cmd-prefix">$</span>
+                        <span class="landing-cmd-text">git clone https://github.com/OmikAcharya/bridge</span>
+                    </div>
+                    <span id="landingCloneCopy" class="landing-cmd-copy">Copy</span>
+                </div>
+
+                <div id="landingDaemonChip" class="landing-cmd-chip" title="Click to copy run command">
+                    <div class="landing-cmd-left">
+                        <span class="landing-cmd-prefix">$</span>
+                        <span class="landing-cmd-text">python3 -m bridge.server</span>
+                    </div>
+                    <span id="landingDaemonCopy" class="landing-cmd-copy">Copy</span>
+                </div>
+            </div>
+
+            <!-- Launch / Open Cockpit Button -->
+            <button id="landingLaunchBtn" class="landing-launch-btn" type="button">
+                <span>Open Terminal Cockpit</span>
+                <span style="font-size: 11px;">↗</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Connected P2P Client View -->
+    <div id="clientView" class="client-view">
+        <!-- Top Bar -->
+        <header>
         <div class="title-group">
             <div id="statusDot" class="status-dot"></div>
             <span class="title">Prompt Bridge</span>
@@ -1111,7 +1342,7 @@
     <!-- Keyboard Open Mini Bar -->
     <div id="keyboardMiniBar" class="keyboard-mini-bar">
         <span>Target: <span id="miniTargetName" class="mini-target-name">Auto</span></span>
-        <span id="miniTargetPath">~/Developer/bridge</span>
+        <span id="miniTargetPath">Searching...</span>
     </div>
 
     <!-- Full-Screen Activity & Dictation Cockpit Modal -->
@@ -1154,7 +1385,7 @@
             <div class="cockpit-input-row">
                 <textarea 
                     id="cockpitPrompt" 
-                    placeholder="Dictate prompt with Wispr Flow..." 
+                    placeholder="Dictate prompt or type..." 
                     rows="1" 
                     autocomplete="off" 
                     autocorrect="on" 
@@ -1175,7 +1406,7 @@
         <div class="banner-left">
             <div id="headerAgentDot" class="activity-dot"></div>
             <div class="banner-text-group">
-                <span id="headerAgentName" class="banner-agent-name">Antigravity — bridge</span>
+                <span id="headerAgentName" class="banner-agent-name">Auto-detect</span>
                 <span id="headerAgentStatus" class="banner-status-tag">Live Log ↗</span>
             </div>
         </div>
@@ -1189,7 +1420,7 @@
     <div class="editor-container">
         <textarea 
             id="prompt" 
-            placeholder="Dictate with Wispr Flow or type..." 
+            placeholder="Dictate prompt or type..." 
             autocomplete="off" 
             autocorrect="on" 
             spellcheck="true"
@@ -1237,6 +1468,7 @@
             <span id="sendSubtitle" class="send-btn-target">to Active Agent</span>
         </button>
     </div>
+    </div> <!-- /clientView -->
 
     <!-- History Bottom Sheet -->
     <div id="historyModal" class="modal-overlay">
@@ -1425,7 +1657,9 @@
                         cockpitAgentDot.classList.remove('busy');
                         if (headerAgentStatus) headerAgentStatus.textContent = 'Live Log ↗';
                     }
-                    if (data.target_name) {
+                    if (getResolvedTarget()) {
+                        updateActivityHeaderOptimistic();
+                    } else if (data.target_name) {
                         cockpitTargetTitle.textContent = data.target_name;
                         headerAgentName.textContent = data.target_name;
                     }
@@ -1534,6 +1768,125 @@
             haptic(10);
         });
 
+        function compressAgentName(agentName, agentType) {
+            const raw = (agentName || agentType || '').trim();
+            if (!raw) return 'Shell';
+            const lower = raw.toLowerCase();
+            if (lower.includes('antigravity') || lower === 'agy') return 'AGY';
+            if (lower.includes('claude')) return 'Claude';
+            if (lower.includes('opencode')) return 'OpenCode';
+            if (lower.includes('codex')) return 'Codex';
+            if (lower.includes('aider')) return 'Aider';
+            if (lower.includes('ipython')) return 'IPython';
+            if (lower.includes('python')) return 'Python';
+            if (lower.includes('node')) return 'Node';
+            if (lower.includes('zsh')) return 'Zsh';
+            if (lower.includes('bash')) return 'Bash';
+            if (lower.includes('fish')) return 'Fish';
+            if (lower.includes('focused') || lower.includes('legacy') || lower.includes('active window')) return 'Mac';
+            if (lower.includes('terminal') || lower.includes('shell')) return 'Shell';
+            return raw;
+        }
+
+        function getTargetProject(target) {
+            if (!target) return '';
+            if (target.id === 'focused') return 'Active Window';
+            if (target.folder && target.folder !== '~') {
+                return target.folder;
+            }
+            const compact = (target.metadata && target.metadata.compact_cwd) || target.cwd || '';
+            if (target.folder === '~' || compact === '~') {
+                return 'Home (~)';
+            }
+            if (compact) {
+                const parts = compact.split('/').filter(Boolean);
+                if (parts.length) return parts[parts.length - 1];
+            }
+            return '';
+        }
+
+        function getTargetCompactPath(target) {
+            if (!target) return '';
+            if (target.id === 'focused') return 'Active Window';
+            if (target.metadata && target.metadata.compact_cwd) {
+                return target.metadata.compact_cwd;
+            }
+            if (target.folder === '~') return '~';
+            if (target.cwd) {
+                const match = target.cwd.match(/^\/Users\/[^\/]+(\/.*)?$/);
+                if (match) {
+                    return '~' + (match[1] || '');
+                }
+                return target.cwd;
+            }
+            return target.folder || '~';
+        }
+
+        function getTargetTty(target) {
+            if (!target || !target.tty) {
+                return (target && target.metadata && target.metadata.tty_short) ? target.metadata.tty_short : '';
+            }
+            return target.tty.replace('/dev/', '');
+        }
+
+        function getTargetDisplayInfo(t) {
+            if (!t) {
+                return {
+                    title: 'Offline',
+                    agent: 'Offline',
+                    project: '',
+                    path: '--',
+                    badge: 'OFFLINE',
+                    cmd: '',
+                    bannerName: 'No Target',
+                    subtitle: 'No terminal target'
+                };
+            }
+            if (t.id === 'focused') {
+                return {
+                    title: 'Focused App',
+                    agent: 'Mac',
+                    project: 'Active Window',
+                    path: 'Active Window',
+                    badge: 'MAC',
+                    cmd: '',
+                    bannerName: 'Mac · Active Window',
+                    subtitle: 'Active application on Mac'
+                };
+            }
+
+            const agent = compressAgentName(t.agent_name, t.agent);
+            const project = getTargetProject(t);
+            const path = getTargetCompactPath(t);
+            const tty = getTargetTty(t);
+
+            // Primary title: prominently the project folder / repository name!
+            const title = project || agent || t.name || 'Terminal';
+
+            // Badge: e.g. "AGY · ttys002" or "AGY"
+            const badge = tty ? `${agent} · ${tty}` : agent;
+
+            // Command (omit if redundant with agent or shell)
+            const rawCmd = (t.metadata && t.metadata.short_cmd) || '';
+            const cmd = (rawCmd && rawCmd.toLowerCase() !== agent.toLowerCase() && rawCmd.toLowerCase() !== 'terminal' && rawCmd.toLowerCase() !== 'zsh' && rawCmd.toLowerCase() !== 'bash') ? rawCmd : '';
+
+            // Clean banner & subtitle display names
+            const bannerName = project ? `${agent} · ${project}` : (path !== '~' ? `${agent} · ${path}` : `${agent} (~)`);
+            const subtitle = project ? `${agent} · ${project}` : `${agent} (${path})`;
+
+            return {
+                title,
+                agent,
+                project,
+                path,
+                tty,
+                badge,
+                cmd,
+                bannerName,
+                subtitle
+            };
+        }
+
         function getResolvedTarget() {
             if (selectedTargetId === 'auto') {
                 return availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') ||
@@ -1547,21 +1900,30 @@
             bentoGrid.innerHTML = '';
 
             // 1. Auto Tile (Full width on top)
-            const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') || availableTargets[0];
+            const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') ||
+                                 availableTargets.find(t => t.id !== 'focused') ||
+                                 availableTargets[0];
             const autoTile = document.createElement('div');
             autoTile.className = `bento-tile full-width ${selectedTargetId === 'auto' ? 'active' : ''}`;
-            const resolvedName = autoResolved ? (autoResolved.agent_name || autoResolved.name) : 'Searching...';
-            const resolvedPath = autoResolved ? ((autoResolved.metadata && autoResolved.metadata.compact_cwd) || autoResolved.folder || '~') : '';
-            
+
+            let autoRouteText = 'Searching for active agents...';
+            let autoBadgeText = 'AUTO';
+            if (autoResolved) {
+                const autoInfo = getTargetDisplayInfo(autoResolved);
+                autoBadgeText = `AUTO · ${autoInfo.agent}`;
+                const autoRouteTarget = autoInfo.project ? `${autoInfo.project} · ${autoInfo.agent}` : autoInfo.agent;
+                autoRouteText = `Routing to ${autoRouteTarget}${autoInfo.path ? ' (' + autoInfo.path + ')' : ''}`;
+            }
+
             autoTile.innerHTML = `
                 <div class="tile-header">
                     <div class="tile-name-group">
                         <div class="tile-dot"></div>
                         <span class="tile-title">Auto-detect Agent</span>
                     </div>
-                    <span class="tile-badge">AUTO</span>
+                    <span class="tile-badge">${autoBadgeText}</span>
                 </div>
-                <div class="tile-path">Routing to ${resolvedName}${resolvedPath ? ' (' + resolvedPath + ')' : ''}</div>
+                <div class="tile-path">${autoRouteText}</div>
             `;
             autoTile.addEventListener('click', () => selectTarget('auto'));
             bentoGrid.appendChild(autoTile);
@@ -1572,10 +1934,7 @@
                 const isSelected = (selectedTargetId === t.id);
                 const isBusy = (t.status === 'busy' || t.is_busy);
                 const dotClass = isBusy ? 'tile-dot busy' : 'tile-dot';
-                const compactPath = (t.metadata && t.metadata.compact_cwd) || t.folder || '~';
-                const ttyStr = t.tty ? t.tty.replace('/dev/', '') : (t.metadata && t.metadata.tty_short ? t.metadata.tty_short : '');
-                const shortName = t.agent_name || t.name;
-                const cmdStr = (t.metadata && t.metadata.short_cmd) || t.cmd || '';
+                const info = getTargetDisplayInfo(t);
 
                 if (t.id === 'focused') {
                     tile.className = `bento-tile full-width ${isSelected ? 'active' : ''}`;
@@ -1591,16 +1950,17 @@
                     `;
                 } else {
                     tile.className = `bento-tile ${isSelected ? 'active' : ''}`;
+                    tile.title = `${t.display_name || info.title} (${info.path})`;
                     tile.innerHTML = `
                         <div class="tile-header">
                             <div class="tile-name-group">
                                 <div class="${dotClass}"></div>
-                                <span class="tile-title">${shortName}</span>
+                                <span class="tile-title">${info.title}</span>
                             </div>
-                            ${ttyStr ? `<span class="tile-badge">${ttyStr.toUpperCase()}</span>` : ''}
+                            <span class="tile-badge">${info.badge}</span>
                         </div>
-                        <div class="tile-path">${compactPath}</div>
-                        ${cmdStr ? `<div class="tile-cmd">${cmdStr}</div>` : ''}
+                        <div class="tile-path">${info.path}</div>
+                        ${info.cmd ? `<div class="tile-cmd">${info.cmd}</div>` : ''}
                     `;
                 }
                 tile.addEventListener('click', () => selectTarget(t.id));
@@ -1617,20 +1977,22 @@
             if (selectedTargetId === 'focused') {
                 sendTitle.textContent = willEnter ? 'Paste & Enter on Mac' : 'Paste to Focused Window';
                 sendSubtitle.textContent = 'Active application on Mac';
-                miniTargetName.textContent = 'Focused App';
+                miniTargetName.textContent = 'Mac';
                 miniTargetPath.textContent = 'Active Window';
                 return;
             }
 
             if (resolved) {
-                let targetDisplay = resolved.name;
-                if (selectedTargetId === 'auto') {
-                    targetDisplay = `${resolved.agent_name || resolved.name}`;
-                }
+                const info = getTargetDisplayInfo(resolved);
                 sendTitle.textContent = 'Send Prompt';
-                sendSubtitle.textContent = `Route to ${targetDisplay}`;
-                miniTargetName.textContent = targetDisplay;
-                miniTargetPath.textContent = resolved.cwd || resolved.tty || '--';
+                if (selectedTargetId === 'auto') {
+                    sendSubtitle.textContent = `Auto → ${info.subtitle}`;
+                    miniTargetName.textContent = `Auto · ${info.title}`;
+                } else {
+                    sendSubtitle.textContent = `Route to ${info.subtitle}`;
+                    miniTargetName.textContent = `${info.agent} · ${info.title}`;
+                }
+                miniTargetPath.textContent = info.path || resolved.tty || '--';
             } else {
                 sendTitle.textContent = 'Send Prompt';
                 sendSubtitle.textContent = 'No terminal target';
@@ -1642,9 +2004,27 @@
         function updateActivityHeaderOptimistic() {
             const resolved = getResolvedTarget();
             if (resolved) {
-                const name = (selectedTargetId === 'auto' ? (resolved.agent_name || resolved.name) : resolved.name) || 'Live Log';
-                if (headerAgentName) headerAgentName.textContent = name;
-                if (cockpitTargetTitle) cockpitTargetTitle.textContent = name;
+                const info = getTargetDisplayInfo(resolved);
+                let displayTitle = '';
+                if (selectedTargetId === 'focused') {
+                    displayTitle = 'Mac · Active Window';
+                } else if (selectedTargetId === 'auto') {
+                    displayTitle = `Auto · ${info.bannerName}`;
+                } else {
+                    displayTitle = info.bannerName;
+                }
+
+                if (headerAgentName) {
+                    headerAgentName.textContent = displayTitle;
+                    headerAgentName.title = resolved.display_name || info.path;
+                }
+                if (cockpitTargetTitle) {
+                    const cockpitTitle = (selectedTargetId === 'auto' ? 'Auto · ' : '') +
+                        `${info.bannerName}${info.path && info.path !== info.project ? ' (' + info.path + ')' : ''}`;
+                    cockpitTargetTitle.textContent = cockpitTitle;
+                    cockpitTargetTitle.title = resolved.display_name || info.path;
+                }
+
                 const isBusy = (resolved.status === 'busy' || resolved.is_busy);
                 if (isBusy) {
                     headerAgentDot.classList.add('busy');
@@ -1724,7 +2104,7 @@
                 }
 
                 const newSignature = JSON.stringify(availableTargets.map(t => [
-                    t.id, t.name, t.status, t.is_busy, t.cwd, t.cmd, t.tty
+                    t.id, t.name, t.folder, t.status, t.is_busy, t.cwd, t.cmd, t.tty
                 ]));
 
                 if (!force && newSignature === lastSignature) {
@@ -1910,11 +2290,22 @@
 
         // Connection Security & Mode Indicator
         const connBadge = document.getElementById('connBadge');
-        const urlParams = new URLSearchParams(window.location.search);
-        const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
-        const p2pRoom = hashParams.get('room') || urlParams.get('room');
-        const p2pKey = hashParams.get('key') || urlParams.get('key');
-        const isP2P = Boolean(p2pRoom) || window.location.hostname.includes('github.io');
+        function getP2PMetadata() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+            const room = hashParams.get('room') || urlParams.get('room');
+            const key = hashParams.get('key') || urlParams.get('key');
+            return {
+                room: room ? room.trim() : '',
+                key: key ? key.trim() : '',
+                hasMetadata: Boolean(room && key)
+            };
+        }
+
+        let p2pMetadata = getP2PMetadata();
+        let p2pRoom = p2pMetadata.room;
+        let p2pKey = p2pMetadata.key;
+        let isP2P = p2pMetadata.hasMetadata;
 
         let mqttClient = null;
         let isP2PReady = false;
@@ -2362,18 +2753,89 @@
             }
         } catch (e) {}
 
-        updateViewportHeight();
-        if (isP2P && p2pRoom && p2pKey) {
-            initP2PRelay(p2pRoom, p2pKey);
-        } else {
-            fetchTargets(true);
+        // Copy command handlers for landing page
+        function copyLandingText(text, copyEl) {
+            navigator.clipboard.writeText(text).then(() => {
+                if (copyEl) {
+                    copyEl.textContent = 'Copied';
+                    copyEl.classList.add('copied');
+                    setTimeout(() => {
+                        copyEl.textContent = 'Copy';
+                        copyEl.classList.remove('copied');
+                    }, 2000);
+                }
+            }).catch(() => {});
         }
-        ping();
-        fetchActivityTail();
-        setInterval(ping, 4000);
-        setInterval(() => fetchTargets(false), 5000);
-        setInterval(fetchActivityTail, 2500);
-        updateMetrics();
+
+        const landingCloneChip = document.getElementById('landingCloneChip');
+        const landingCloneCopy = document.getElementById('landingCloneCopy');
+        if (landingCloneChip) {
+            landingCloneChip.addEventListener('click', () => {
+                copyLandingText('git clone https://github.com/OmikAcharya/bridge.git', landingCloneCopy);
+            });
+        }
+
+        const landingDaemonChip = document.getElementById('landingDaemonChip');
+        const landingDaemonCopy = document.getElementById('landingDaemonCopy');
+        if (landingDaemonChip) {
+            landingDaemonChip.addEventListener('click', () => {
+                copyLandingText('python3 -m bridge.server', landingDaemonCopy);
+            });
+        }
+
+        const landingLaunchBtn = document.getElementById('landingLaunchBtn');
+        if (landingLaunchBtn) {
+            landingLaunchBtn.addEventListener('click', () => {
+                const landingViewEl = document.getElementById('landingView');
+                const clientViewEl = document.getElementById('clientView');
+                if (landingViewEl) landingViewEl.style.display = 'none';
+                if (clientViewEl) clientViewEl.style.display = 'flex';
+                startLocalPolling();
+            });
+        }
+
+        let pollingIntervalsStarted = false;
+        function startLocalPolling() {
+            if (pollingIntervalsStarted) return;
+            pollingIntervalsStarted = true;
+            fetchTargets(true);
+            ping();
+            fetchActivityTail();
+            setInterval(ping, 4000);
+            setInterval(() => fetchTargets(false), 5000);
+            setInterval(fetchActivityTail, 2500);
+        }
+
+        function routeInit() {
+            updateViewportHeight();
+            const meta = getP2PMetadata();
+            p2pRoom = meta.room;
+            p2pKey = meta.key;
+            isP2P = meta.hasMetadata;
+
+            const landingViewEl = document.getElementById('landingView');
+            const clientViewEl = document.getElementById('clientView');
+
+            if (isP2P) {
+                // Connected route with P2P metadata: show client and activate tunnel
+                if (landingViewEl) landingViewEl.style.display = 'none';
+                if (clientViewEl) clientViewEl.style.display = 'flex';
+                initP2PRelay(p2pRoom, p2pKey);
+            } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.search.includes('client=1')) {
+                // Local loopback daemon or explicit client query: show client and poll daemon
+                if (landingViewEl) landingViewEl.style.display = 'none';
+                if (clientViewEl) clientViewEl.style.display = 'flex';
+                startLocalPolling();
+            } else {
+                // Base URL / on GitHub Pages or external host without P2P metadata: show minimal lander!
+                if (landingViewEl) landingViewEl.style.display = 'flex';
+                if (clientViewEl) clientViewEl.style.display = 'none';
+            }
+            updateMetrics();
+        }
+
+        routeInit();
+        window.addEventListener('hashchange', routeInit);
     </script>
 </body>
 </html>
