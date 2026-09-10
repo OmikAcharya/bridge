@@ -2269,9 +2269,12 @@
             const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
             const room = hashParams.get('room') || urlParams.get('room');
             const key = hashParams.get('key') || urlParams.get('key');
+            const brokerRaw = hashParams.get('broker') || urlParams.get('broker');
+            const broker = brokerRaw !== null ? parseInt(brokerRaw, 10) : 0;
             return {
                 room: room ? room.trim() : '',
                 key: key ? key.trim() : '',
+                broker: isNaN(broker) ? 0 : broker,
                 hasMetadata: Boolean(room && key)
             };
         }
@@ -2466,48 +2469,140 @@
 
         // Native Zero-Dependency MQTT v3.1.1 WebSocket Client
         class NanoMQTTWS {
-            constructor(brokers, clientId, onMessage, onConnect, onDisconnect) {
+            constructor(brokers, clientId, onMessage, onConnect, onDisconnect, preferredBrokerIdx = 0) {
                 this.brokers = Array.isArray(brokers) ? brokers : [brokers];
-                this.brokerIdx = 0;
+                this.brokerIdx = preferredBrokerIdx % this.brokers.length;
+                this.activeBrokerIdx = this.brokerIdx;
+                this.consecutiveFailures = 0;
                 this.clientId = clientId;
                 this.onMessage = onMessage;
                 this.onConnect = onConnect;
                 this.onDisconnect = onDisconnect;
                 this.ws = null;
                 this.pingTimer = null;
+                this.pingWatchdog = null;
+                this.connectTimeout = null;
+                this.reconnectTimer = null;
+                this.isConnack = false;
+                this.subscriptions = new Set();
                 this.enc = new TextEncoder();
                 this.dec = new TextDecoder();
                 this.connect();
             }
 
-            connect() {
+            isConnected() {
+                return this.ws !== null && this.ws.readyState === WebSocket.OPEN && this.isConnack;
+            }
+
+            _cleanup() {
                 if (this.ws) {
-                    try { this.ws.close(); } catch(e) {}
+                    try {
+                        this.ws.onopen = null;
+                        this.ws.onmessage = null;
+                        this.ws.onerror = null;
+                        this.ws.onclose = null;
+                        this.ws.close();
+                    } catch (e) {}
                     this.ws = null;
                 }
-                clearInterval(this.pingTimer);
+                if (this.connectTimeout) {
+                    clearTimeout(this.connectTimeout);
+                    this.connectTimeout = null;
+                }
+                if (this.pingTimer) {
+                    clearInterval(this.pingTimer);
+                    this.pingTimer = null;
+                }
+                if (this.pingWatchdog) {
+                    clearTimeout(this.pingWatchdog);
+                    this.pingWatchdog = null;
+                }
+                if (this.reconnectTimer) {
+                    clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = null;
+                }
+            }
+
+            connect() {
+                this._cleanup();
+                const wasConnected = this.isConnack;
+                this.isConnack = false;
+
                 const item = this.brokers[this.brokerIdx % this.brokers.length];
                 const url = typeof item === 'string' ? item : item.url;
                 this.username = (typeof item === 'object' && item.username) ? item.username : null;
                 this.password = (typeof item === 'object' && item.password) ? item.password : null;
 
                 try {
-                    this.ws = new WebSocket(url, ['mqtt']);
-                    this.ws.binaryType = 'arraybuffer';
-                    this.ws.onopen = () => this._sendConnect();
-                    this.ws.onmessage = (e) => this._handleMessage(new Uint8Array(e.data));
-                    this.ws.onclose = () => {
-                        clearInterval(this.pingTimer);
-                        if (this.onDisconnect) this.onDisconnect();
-                        this.brokerIdx++;
-                        setTimeout(() => this.connect(), 2000);
+                    const socket = new WebSocket(url, ['mqtt']);
+                    this.ws = socket;
+                    socket.binaryType = 'arraybuffer';
+
+                    // 8-second connect watchdog
+                    this.connectTimeout = setTimeout(() => {
+                        if (this.ws === socket && !this.isConnack) {
+                            try { socket.close(); } catch(e) {}
+                        }
+                    }, 8000);
+
+                    socket.onopen = () => {
+                        if (this.ws !== socket) return;
+                        this._sendConnect();
                     };
-                    this.ws.onerror = () => {
-                        try { this.ws.close(); } catch(e) {}
+
+                    socket.onmessage = (e) => {
+                        if (this.ws !== socket) return;
+                        this._handleMessage(new Uint8Array(e.data));
+                    };
+
+                    socket.onclose = () => {
+                        if (this.ws !== socket) return;
+                        this._handleDisconnect();
+                    };
+
+                    socket.onerror = () => {
+                        if (this.ws !== socket) return;
+                        try { socket.close(); } catch(e) {}
                     };
                 } catch(e) {
-                    this.brokerIdx++;
-                    setTimeout(() => this.connect(), 2000);
+                    this._handleDisconnect();
+                }
+            }
+
+            _handleDisconnect() {
+                const hadConnection = this.isConnack;
+                this._cleanup();
+                this.isConnack = false;
+                if (this.onDisconnect && hadConnection) {
+                    this.onDisconnect();
+                }
+
+                if (hadConnection) {
+                    // Previous broker was healthy; stay on the same broker
+                    this.brokerIdx = this.activeBrokerIdx;
+                    this.consecutiveFailures = 0;
+                } else {
+                    this.consecutiveFailures++;
+                    if (this.consecutiveFailures >= 3) {
+                        this.brokerIdx = (this.brokerIdx + 1) % this.brokers.length;
+                        this.consecutiveFailures = 0;
+                    } else {
+                        this.brokerIdx = this.activeBrokerIdx;
+                    }
+                }
+
+                this.reconnectTimer = setTimeout(() => this.connect(), 1500);
+            }
+
+            reconnect(force = false) {
+                if (force || !this.isConnected()) {
+                    if (this.reconnectTimer) {
+                        clearTimeout(this.reconnectTimer);
+                        this.reconnectTimer = null;
+                    }
+                    this.brokerIdx = this.activeBrokerIdx;
+                    this.consecutiveFailures = 0;
+                    this.connect();
                 }
             }
 
@@ -2569,7 +2664,7 @@
                 this.ws.send(pkt);
             }
 
-            subscribe(topic) {
+            _sendSubscribe(topic) {
                 if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
                 const top = this.enc.encode(topic);
                 const payload = new Uint8Array(2 + 2 + top.length + 1);
@@ -2583,6 +2678,13 @@
                 pkt.set(lenBytes, 1);
                 pkt.set(payload, 1 + lenBytes.length);
                 this.ws.send(pkt);
+            }
+
+            subscribe(topic) {
+                this.subscriptions.add(topic);
+                if (this.isConnected()) {
+                    this._sendSubscribe(topic);
+                }
             }
 
             publish(topic, payloadStr) {
@@ -2602,14 +2704,41 @@
             }
 
             _handleMessage(buf) {
+                if (this.pingWatchdog) {
+                    clearTimeout(this.pingWatchdog);
+                    this.pingWatchdog = null;
+                }
                 const cmd = buf[0] & 0xf0;
                 if (cmd === 0x20) {
-                    clearInterval(this.pingTimer);
+                    if (this.connectTimeout) {
+                        clearTimeout(this.connectTimeout);
+                        this.connectTimeout = null;
+                    }
+                    this.isConnack = true;
+                    this.activeBrokerIdx = this.brokerIdx;
+                    this.consecutiveFailures = 0;
+
+                    // Re-subscribe all active topics automatically
+                    for (const topic of this.subscriptions) {
+                        this._sendSubscribe(topic);
+                    }
+
+                    // Watchdog heartbeat every 15s; disconnect if no response within 6s
+                    if (this.pingTimer) clearInterval(this.pingTimer);
                     this.pingTimer = setInterval(() => {
                         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                            this.ws.send(new Uint8Array([0xC0, 0x00]));
+                            try {
+                                this.ws.send(new Uint8Array([0xC0, 0x00]));
+                                if (this.pingWatchdog) clearTimeout(this.pingWatchdog);
+                                this.pingWatchdog = setTimeout(() => {
+                                    this.reconnect(true);
+                                }, 6000);
+                            } catch (e) {
+                                this.reconnect(true);
+                            }
                         }
-                    }, 20000);
+                    }, 15000);
+
                     if (this.onConnect) this.onConnect();
                 } else if (cmd === 0x30) {
                     const { length: remLen, nextOffset: headerEnd } = this._decodeLength(buf, 1);
@@ -2633,6 +2762,8 @@
                     'wss://broker.emqx.io:8084/mqtt'
                 ];
                 const clientId = 'phone_' + Math.random().toString(16).slice(2, 10);
+                const meta = getP2PMetadata();
+                const preferredBroker = meta.broker !== null ? meta.broker : 0;
                 mqttClient = new NanoMQTTWS(
                     brokers,
                     clientId,
@@ -2665,14 +2796,27 @@
                         isP2PReady = false;
                         statusDot.classList.add('offline');
                         updateConnectionBadge('p2p_offline');
-                    }
+                    },
+                    preferredBroker
                 );
             } catch (e) {
                 console.error('P2P relay init error:', e);
             }
         }
 
-        async function p2pRequest(action, params = {}, timeoutMs = 15000) {
+        function clearPendingP2PRequests(reason = 'Disconnected') {
+            isTargetsFetching = false;
+            isTailFetching = false;
+            for (const [id, req] of pendingRequests.entries()) {
+                if (req.timeout) clearTimeout(req.timeout);
+                if (req.reject) {
+                    try { req.reject(new Error(reason)); } catch (e) {}
+                }
+            }
+            pendingRequests.clear();
+        }
+
+        async function p2pRequest(action, params = {}, timeoutMs = 12000) {
             if (!mqttClient || !isP2PReady || !p2pCrypto) {
                 throw new Error('P2P not connected');
             }
@@ -2692,7 +2836,12 @@
                     resolve: (data) => {
                         clearTimeout(timeout);
                         resolve(data);
-                    }
+                    },
+                    reject: (err) => {
+                        clearTimeout(timeout);
+                        reject(err);
+                    },
+                    timeout
                 });
 
                 mqttClient.publish(`pb/${p2pRoom}/mac`, JSON.stringify(encryptedEnvelope));
@@ -2700,17 +2849,43 @@
         }
 
         // Instant reconnection when phone unlocks, wakes up from sleep, or tab regains focus
+        let lastWakeupTime = 0;
         function handleMobileWakeup() {
+            const now = Date.now();
+            if (now - lastWakeupTime < 1000) return; // Debounce wake storm
+            lastWakeupTime = now;
+
             consecutivePingFails = 0;
-            ping();
-            fetchTargets(false);
+            if (isP2P) {
+                clearPendingP2PRequests('Device resumed');
+                if (mqttClient) {
+                    mqttClient.reconnect(true);
+                }
+            } else {
+                ping();
+                fetchTargets(false);
+                fetchActivityTail();
+            }
         }
+
+        // Timer drift detection for suspended mobile runtimes (screen lock)
+        let lastSleepWatchdogTick = Date.now();
+        setInterval(() => {
+            const now = Date.now();
+            const elapsed = now - lastSleepWatchdogTick;
+            lastSleepWatchdogTick = now;
+            if (elapsed > 3500) {
+                // OS suspended JavaScript execution during screen lock / deep sleep
+                handleMobileWakeup();
+            }
+        }, 1500);
 
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 handleMobileWakeup();
             }
         });
+        window.addEventListener('pageshow', handleMobileWakeup);
         window.addEventListener('focus', handleMobileWakeup);
         window.addEventListener('online', handleMobileWakeup);
 
@@ -2758,12 +2933,14 @@
         }
 
         let pollingIntervalsStarted = false;
-        function startLocalPolling() {
+        function startPolling() {
             if (pollingIntervalsStarted) return;
             pollingIntervalsStarted = true;
-            fetchTargets(true);
-            ping();
-            fetchActivityTail();
+            if (!isP2P) {
+                fetchTargets(true);
+                ping();
+                fetchActivityTail();
+            }
             setInterval(ping, 4000);
             setInterval(() => fetchTargets(false), 5000);
             setInterval(fetchActivityTail, 2500);
@@ -2784,11 +2961,12 @@
                 if (landingViewEl) landingViewEl.style.display = 'none';
                 if (clientViewEl) clientViewEl.style.display = 'flex';
                 initP2PRelay(p2pRoom, p2pKey);
+                startPolling();
             } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.search.includes('client=1')) {
                 // Local loopback daemon or explicit client query: show client and poll daemon
                 if (landingViewEl) landingViewEl.style.display = 'none';
                 if (clientViewEl) clientViewEl.style.display = 'flex';
-                startLocalPolling();
+                startPolling();
             } else {
                 // Base URL / on GitHub Pages or external host without P2P metadata: show minimal lander!
                 if (landingViewEl) landingViewEl.style.display = 'flex';
