@@ -1194,29 +1194,6 @@
             color: var(--green);
         }
 
-        .landing-launch-btn {
-            background: transparent;
-            border: 1px solid var(--surface-border);
-            border-radius: 10px;
-            padding: 10px 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            color: var(--text-muted);
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            margin-top: 2px;
-        }
-
-        .landing-launch-btn:hover {
-            color: var(--text-main);
-            border-color: #52525b;
-            background: var(--surface);
-        }
-
         .client-view {
             display: flex;
             flex-direction: column;
@@ -1298,12 +1275,6 @@
                     <span id="landingDaemonCopy" class="landing-cmd-copy">Copy</span>
                 </div>
             </div>
-
-            <!-- Launch / Open Cockpit Button -->
-            <button id="landingLaunchBtn" class="landing-launch-btn" type="button">
-                <span>Open Terminal Cockpit</span>
-                <span style="font-size: 11px;">↗</span>
-            </button>
         </div>
     </div>
 
@@ -2780,17 +2751,6 @@
         if (landingDaemonChip) {
             landingDaemonChip.addEventListener('click', () => {
                 copyLandingText('python3 -m bridge.server', landingDaemonCopy);
-            });
-        }
-
-        const landingLaunchBtn = document.getElementById('landingLaunchBtn');
-        if (landingLaunchBtn) {
-            landingLaunchBtn.addEventListener('click', () => {
-                const landingViewEl = document.getElementById('landingView');
-                const clientViewEl = document.getElementById('clientView');
-                if (landingViewEl) landingViewEl.style.display = 'none';
-                if (clientViewEl) clientViewEl.style.display = 'flex';
-                startLocalPolling();
             });
         }
 
