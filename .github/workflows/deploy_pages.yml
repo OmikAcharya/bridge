@@ -2,7 +2,7 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [feat/ui-and-frontend-cleanup]
+    branches: [main]
 
 jobs:
   deploy:
