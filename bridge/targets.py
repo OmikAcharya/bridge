@@ -101,11 +101,12 @@ class TargetManager:
             if t.tty == clean_tty or t.tty == query:
                 return t
 
-        # 4. Folder / CWD / Name match
+        # 4. Folder / CWD / Name match (prefer non-busy if multiple sessions match)
         lower_query = query.lower()
-        for t in targets:
-            if t.folder.lower() == lower_query or t.name.lower() == lower_query:
-                return t
+        candidates = [t for t in targets if t.folder.lower() == lower_query or t.name.lower() == lower_query]
+        if candidates:
+            idle_candidate = next((c for c in candidates if not c.is_busy), None)
+            return idle_candidate or candidates[0]
 
         # 5. Check static config for predefined target
         static_cfg = self.config.get_static_target(query)
@@ -128,17 +129,26 @@ class TargetManager:
         if not targets:
             return None
 
-        # Priority 1: Running interactive agent (Claude, Codex, OpenCode, Aider, Agy)
+        # Priority 1: Running interactive agent (prefer non-busy first)
+        for t in targets:
+            if t.agent in ("claude", "codex", "opencode", "aider", "agy") and t.id != "focused" and not t.is_busy:
+                return t
         for t in targets:
             if t.agent in ("claude", "codex", "opencode", "aider", "agy") and t.id != "focused":
                 return t
 
         # Priority 2: Other interactive sessions (Python, Node)
         for t in targets:
+            if t.agent in ("python", "node") and t.id != "focused" and not t.is_busy:
+                return t
+        for t in targets:
             if t.agent in ("python", "node") and t.id != "focused":
                 return t
 
         # Priority 3: Any active terminal shell
+        for t in targets:
+            if t.id != "focused" and not t.is_busy:
+                return t
         for t in targets:
             if t.id != "focused":
                 return t

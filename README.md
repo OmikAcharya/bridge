@@ -6,7 +6,7 @@ A lightweight, non-intrusive input router and terminal monitor for macOS. Dispat
 
 ## Overview
 
-Software development with interactive CLI agents (such as Claude Code, Antigravity, Aider, Codex, or standard shells) often involves long, structured prompts. While mobile speech-to-text engines (e.g., Wispr Flow, iOS dictation) enable rapid thought-to-text capture, transferring text from a phone to a specific terminal tab on a Mac typically introduces workflow friction:
+Software development with interactive CLI agents (such as Claude Code, Antigravity, Aider, Codex, or standard shells) often involves long, structured prompts. While mobile speech-to-text engines (e.g., mobile dictation) enable rapid thought-to-text capture, transferring text from a phone to a specific terminal tab on a Mac typically introduces workflow friction:
 
 - **Window Management**: Shifting GUI focus to the terminal window, finding the right tab, pasting, and pressing Return.
 - **Screen Sharing / VNC**: Heavy on bandwidth and power, with desktop UI scaled down to unreadable mobile viewports.

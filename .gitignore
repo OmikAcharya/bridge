@@ -17,3 +17,4 @@ bridge_config.json
 *.egg-info/
 dist/
 build/
+brag-output/

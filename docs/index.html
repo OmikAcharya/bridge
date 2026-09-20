@@ -8,6 +8,9 @@
     <meta http-equiv="Expires" content="0">
     <meta name="theme-color" content="#09090b">
     <title>Prompt Bridge</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="alternate icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <style>
         :root {
             --app-height: 100dvh;
@@ -52,7 +55,7 @@
             color: var(--text-main);
             display: flex;
             flex-direction: column;
-            padding: calc(8px + env(safe-area-inset-top)) 14px calc(10px + env(safe-area-inset-bottom)) 14px;
+            padding: calc(6px + env(safe-area-inset-top)) 12px calc(8px + env(safe-area-inset-bottom)) 12px;
             transition: padding 0.15s ease;
         }
 
@@ -61,15 +64,19 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 2px 2px 8px 2px;
+            padding: 2px 0 6px 0;
             flex-shrink: 0;
             transition: padding 0.15s ease;
+            min-height: 32px;
+            gap: 8px;
         }
 
         .title-group {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 7px;
+            min-width: 0;
+            flex: 1;
         }
 
         .status-dot {
@@ -79,6 +86,7 @@
             background: var(--green);
             box-shadow: 0 0 8px var(--green-glow);
             transition: background-color 0.2s, box-shadow 0.2s;
+            flex-shrink: 0;
         }
 
         .status-dot.offline {
@@ -87,10 +95,12 @@
         }
 
         .title {
-            font-size: 14px;
+            font-size: 13.5px;
             font-weight: 600;
             letter-spacing: -0.01em;
             color: var(--text-main);
+            line-height: 1.25;
+            white-space: nowrap;
         }
 
         .conn-badge {
@@ -98,13 +108,16 @@
             font-size: 9.5px;
             font-weight: 600;
             border-radius: 12px;
-            padding: 2px 7px;
+            padding: 2.5px 7px;
             letter-spacing: 0.02em;
             display: inline-flex;
             align-items: center;
             gap: 4px;
             cursor: pointer;
             user-select: none;
+            line-height: 1.25;
+            white-space: nowrap;
+            flex-shrink: 0;
             transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
@@ -286,11 +299,11 @@
         .bento-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
-            margin-bottom: 10px;
+            gap: 6px;
+            margin-bottom: 8px;
             flex-shrink: 0;
             width: 100%;
-            max-height: 220px;
+            max-height: 210px;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
@@ -304,11 +317,11 @@
         .bento-tile {
             background: var(--surface);
             border: 1px solid var(--surface-border);
-            border-radius: 12px;
-            padding: 10px 12px;
+            border-radius: 10px;
+            padding: 8px 10px;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 3px;
             cursor: pointer;
             transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
             position: relative;
@@ -338,6 +351,7 @@
             gap: 6px;
             min-width: 0;
             width: 100%;
+            line-height: 1.25;
         }
 
         .tile-name-group {
@@ -365,47 +379,58 @@
         }
 
         .tile-title {
-            font-size: 13px;
+            font-size: 12.5px;
             font-weight: 600;
             color: var(--text-main);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             min-width: 0;
+            line-height: 1.25;
         }
 
         .tile-badge {
             font-family: var(--font-mono);
             font-size: 9px;
             font-weight: 600;
-            padding: 2px 5px;
+            padding: 2px 6px;
             border-radius: 4px;
             background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
+            letter-spacing: 0.02em;
             flex-shrink: 0;
             margin-left: auto;
+            white-space: nowrap;
+            line-height: 1.25;
+        }
+
+        .bento-tile.active .tile-badge {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+            color: var(--text-main);
         }
 
         .tile-path {
             font-family: var(--font-mono);
-            font-size: 11px;
+            font-size: 10.5px;
             color: var(--text-muted);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             min-width: 0;
+            line-height: 1.35;
         }
 
         .tile-cmd {
             font-family: var(--font-mono);
-            font-size: 10px;
+            font-size: 9.5px;
             color: var(--text-dim);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             min-width: 0;
+            line-height: 1.3;
         }
 
         /* Keyboard Active Mini Session Bar */
@@ -414,14 +439,26 @@
             background: var(--surface);
             border: 1px solid var(--surface-border);
             border-radius: 8px;
-            padding: 4px 10px;
-            margin-bottom: 6px;
+            padding: 5px 10px;
+            margin-bottom: 5px;
             font-size: 11px;
+            line-height: 1.35;
             font-family: var(--font-mono);
             color: var(--text-muted);
             align-items: center;
             justify-content: space-between;
+            gap: 8px;
             flex-shrink: 0;
+            min-height: 28px;
+        }
+
+        .keyboard-mini-bar > span:first-child {
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-shrink: 0;
+            max-width: 55%;
         }
 
         .keyboard-mini-bar .mini-target-name {
@@ -429,14 +466,22 @@
             font-weight: 600;
         }
 
+        #miniTargetPath {
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: right;
+            flex: 1;
+        }
+
         /* Keyboard Open Layout Mode */
         body.keyboard-active {
-            padding-top: calc(4px + env(safe-area-inset-top));
-            padding-bottom: 6px;
+            padding: calc(4px + env(safe-area-inset-top)) 10px 4px 10px;
         }
 
         body.keyboard-active header {
-            padding-bottom: 4px;
+            padding-bottom: 3px;
         }
 
         body.keyboard-active .bento-grid {
@@ -447,22 +492,52 @@
             display: flex;
         }
 
-        body.keyboard-active .quick-actions-bar {
-            padding-top: 4px;
-            padding-bottom: 2px;
+        body.keyboard-active .editor-container {
+            min-height: 52px;
         }
 
-        body.keyboard-active .controls {
-            margin-top: 4px;
+        body.keyboard-active textarea {
+            padding: 8px 10px;
+            font-size: 14.5px;
+            line-height: 1.4;
+        }
+
+        body.keyboard-active .editor-footer {
+            padding: 3px 10px 4px 10px;
+        }
+
+        body.keyboard-active .quick-actions-bar {
+            padding-top: 3px;
+            padding-bottom: 2px;
             gap: 4px;
         }
 
+        body.keyboard-active .action-chip {
+            padding: 4px 8px;
+            font-size: 11px;
+            min-height: 26px;
+        }
+
+        body.keyboard-active .controls {
+            margin-top: 3px;
+            gap: 3px;
+        }
+
         body.keyboard-active .send-btn {
-            height: 48px;
+            min-height: 42px;
+            height: auto;
+            padding: 5px 10px;
+            gap: 1px;
         }
 
         body.keyboard-active .send-btn-title {
-            font-size: 14px;
+            font-size: 13.5px;
+            line-height: 1.2;
+        }
+
+        body.keyboard-active .send-btn-target {
+            font-size: 10px;
+            line-height: 1.2;
         }
 
         /* Standalone Live Activity Banner */
@@ -513,7 +588,19 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 160px;
+            max-width: 180px;
+        }
+
+        @media (min-width: 480px) {
+            .banner-agent-name {
+                max-width: 280px;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .banner-hint {
+                display: none;
+            }
         }
 
         .banner-status-tag {
@@ -552,7 +639,7 @@
             border-radius: 12px;
             overflow: hidden;
             transition: border-color 0.15s ease;
-            min-height: 80px;
+            min-height: 70px;
         }
 
         .editor-container:focus-within {
@@ -567,9 +654,9 @@
             outline: none;
             color: var(--text-main);
             font-family: var(--font-sans);
-            font-size: 17px;
-            line-height: 1.4;
-            padding: 12px 14px;
+            font-size: 16px;
+            line-height: 1.45;
+            padding: 10px 12px;
             resize: none;
             -webkit-appearance: none;
         }
@@ -583,9 +670,10 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 5px 12px 6px 12px;
+            padding: 4px 10px 5px 10px;
             border-top: 1px solid rgba(255, 255, 255, 0.04);
             font-size: 11px;
+            line-height: 1.35;
             color: var(--text-muted);
             font-family: var(--font-mono);
             flex-shrink: 0;
@@ -594,7 +682,7 @@
         .editor-actions {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             font-family: var(--font-sans);
         }
 
@@ -602,7 +690,8 @@
             background: none;
             border: none;
             color: var(--text-muted);
-            font-size: 12px;
+            font-size: 11.5px;
+            line-height: 1.25;
             font-weight: 500;
             cursor: pointer;
             padding: 2px 4px;
@@ -615,10 +704,10 @@
         /* Action Bar */
         .quick-actions-bar {
             display: flex;
-            gap: 6px;
+            gap: 5px;
             overflow-x: auto;
             scrollbar-width: none;
-            padding: 6px 0 4px 0;
+            padding: 5px 0 3px 0;
             flex-shrink: 0;
         }
 
@@ -630,8 +719,8 @@
             background: var(--surface);
             border: 1px solid var(--surface-border);
             border-radius: 8px;
-            padding: 6px 11px;
-            font-size: 12px;
+            padding: 5px 10px;
+            font-size: 11.5px;
             font-weight: 500;
             color: var(--text-muted);
             cursor: pointer;
@@ -641,6 +730,8 @@
             align-items: center;
             justify-content: center;
             font-family: var(--font-sans);
+            line-height: 1.3;
+            min-height: 28px;
         }
 
         .action-chip:active {
@@ -657,10 +748,10 @@
 
         /* Controls & Enter Toggle */
         .controls {
-            margin-top: 6px;
+            margin-top: 5px;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 5px;
             flex-shrink: 0;
         }
 
@@ -668,14 +759,16 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 4px;
+            padding: 0 2px;
+            min-height: 20px;
         }
 
         .toggle-label {
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-size: 12px;
+            gap: 7px;
+            font-size: 11.5px;
+            line-height: 1.3;
             color: var(--text-muted);
             cursor: pointer;
             user-select: none;
@@ -683,19 +776,20 @@
 
         .toggle-switch {
             position: relative;
-            width: 32px;
-            height: 18px;
+            width: 30px;
+            height: 17px;
             background: #27272a;
             border-radius: 10px;
             transition: background 0.2s;
             display: inline-block;
+            flex-shrink: 0;
         }
 
         .toggle-switch::after {
             content: '';
             position: absolute;
-            width: 14px;
-            height: 14px;
+            width: 13px;
+            height: 13px;
             border-radius: 50%;
             background: white;
             top: 2px;
@@ -712,12 +806,13 @@
         }
 
         input[type="checkbox"]:checked + .toggle-switch::after {
-            transform: translateX(14px);
+            transform: translateX(13px);
         }
 
         .send-btn {
             width: 100%;
-            height: 52px;
+            min-height: 48px;
+            height: auto;
             border-radius: 12px;
             border: none;
             background: var(--accent);
@@ -730,7 +825,9 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 1px;
+            gap: 2px;
+            padding: 7px 12px;
+            line-height: 1.25;
             transition: background 0.15s, transform 0.1s, opacity 0.15s;
             box-shadow: 0 4px 14px rgba(255, 255, 255, 0.08);
         }
@@ -740,15 +837,22 @@
         }
 
         .send-btn-title {
-            font-size: 15px;
+            font-size: 14.5px;
             font-weight: 600;
+            line-height: 1.25;
+            white-space: nowrap;
         }
 
         .send-btn-target {
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 400;
             font-family: var(--font-mono);
-            opacity: 0.7;
+            opacity: 0.75;
+            line-height: 1.25;
+            max-width: 95%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .send-btn.success {
@@ -830,7 +934,13 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 150px;
+            max-width: 200px;
+        }
+
+        @media (min-width: 480px) {
+            .cockpit-target-title {
+                max-width: 320px;
+            }
         }
 
         .cockpit-header-actions {
@@ -1074,12 +1184,222 @@
         .history-card:active {
             background: var(--surface-hover);
         }
+
+        /* Landing View Container & Components */
+        .landing-view {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 100vh;
+            padding: 24px 16px;
+            box-sizing: border-box;
+        }
+
+        .landing-container {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-sizing: border-box;
+        }
+
+        .landing-chips-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .landing-agent-chip {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 500;
+            color: #a1a1aa;
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 8px;
+            padding: 4px 10px;
+        }
+
+        .landing-cmd-chip {
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: 10px;
+            padding: 9px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            cursor: pointer;
+            transition: border-color 0.15s ease;
+            user-select: none;
+        }
+
+        .landing-cmd-chip:hover {
+            border-color: #52525b;
+        }
+
+        .landing-cmd-chip:active {
+            transform: scale(0.99);
+        }
+
+        .landing-cmd-left {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+        }
+
+        .landing-cmd-prefix {
+            color: var(--green);
+            flex-shrink: 0;
+        }
+
+        .landing-cmd-text {
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .landing-cmd-copy {
+            font-size: 10.5px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            margin-left: 8px;
+        }
+
+        .landing-cmd-copy.copied {
+            color: var(--green);
+        }
+
+        .client-view {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 580px;
+            margin: 0 auto;
+            flex: 1;
+            min-height: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        @media (max-width: 360px) {
+            .header-actions .btn-icon-subtle span {
+                display: none;
+            }
+            .header-actions .btn-icon-subtle {
+                padding: 4px 6px;
+            }
+            .title {
+                font-size: 13px;
+            }
+            .conn-badge {
+                font-size: 9px;
+                padding: 2px 5px;
+            }
+            body {
+                padding-left: 8px;
+                padding-right: 8px;
+            }
+        }
+
+        @media (max-width: 330px) {
+            .bento-grid {
+                grid-template-columns: 1fr;
+            }
+            .bento-tile.full-width {
+                grid-column: span 1;
+            }
+        }
     </style>
 </head>
 <body>
 
-    <!-- Top Bar -->
-    <header>
+    <!-- Minimal Lander View (Shown on base URL / when no P2P metadata is present) -->
+    <div id="landingView" class="landing-view" style="display: none;">
+        <div class="landing-container">
+            <!-- Header -->
+            <header style="display: flex; align-items: center; justify-content: space-between; padding: 2px 0 4px 0; border-bottom: none; margin-bottom: 0;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="conn-status-dot"></div>
+                    <span style="font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-main);">
+                        Prompt Bridge
+                    </span>
+                </div>
+                <div class="conn-badge p2p" style="font-size: 9.5px; padding: 2px 7px;">
+                    <span class="badge-dot"></span> P2P E2EE
+                </div>
+            </header>
+
+            <!-- Status Banner -->
+            <div class="conn-status-banner">
+                <div class="conn-status-dot"></div>
+                <div>
+                    <div class="conn-status-title">P2P Encrypted Tunnel</div>
+                    <div class="conn-status-sub">Direct End-to-End Encrypted Relay</div>
+                </div>
+            </div>
+
+            <!-- Target Support Chips -->
+            <div class="landing-chips-row">
+                <span class="landing-agent-chip">AGY</span>
+                <span class="landing-agent-chip">Claude</span>
+                <span class="landing-agent-chip">Codex</span>
+                <span class="landing-agent-chip">OpenCode</span>
+                <span class="landing-agent-chip">Zsh</span>
+            </div>
+
+            <!-- Connection Details List -->
+            <div class="conn-details-list">
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Security</span>
+                    <span class="conn-detail-value mono">CTR-HMAC-SHA256 (E2EE)</span>
+                </div>
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Relay Broker</span>
+                    <span class="conn-detail-value mono">broker.emqx.io:8084</span>
+                </div>
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Injection Method</span>
+                    <span class="conn-detail-value mono">os.write(master_fd)</span>
+                </div>
+                <div class="conn-detail-row">
+                    <span class="conn-detail-label">Daemon Port</span>
+                    <span class="conn-detail-value mono">127.0.0.1:8765</span>
+                </div>
+            </div>
+
+            <!-- Quick Start Command Chips -->
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div id="landingCloneChip" class="landing-cmd-chip" title="Click to copy clone command">
+                    <div class="landing-cmd-left">
+                        <span class="landing-cmd-prefix">$</span>
+                        <span class="landing-cmd-text">git clone https://github.com/OmikAcharya/bridge</span>
+                    </div>
+                    <span id="landingCloneCopy" class="landing-cmd-copy">Copy</span>
+                </div>
+
+                <div id="landingDaemonChip" class="landing-cmd-chip" title="Click to copy run command">
+                    <div class="landing-cmd-left">
+                        <span class="landing-cmd-prefix">$</span>
+                        <span class="landing-cmd-text">python3 -m bridge.server</span>
+                    </div>
+                    <span id="landingDaemonCopy" class="landing-cmd-copy">Copy</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connected P2P Client View -->
+    <div id="clientView" class="client-view">
+        <!-- Top Bar -->
+        <header>
         <div class="title-group">
             <div id="statusDot" class="status-dot"></div>
             <span class="title">Prompt Bridge</span>
@@ -1111,7 +1431,7 @@
     <!-- Keyboard Open Mini Bar -->
     <div id="keyboardMiniBar" class="keyboard-mini-bar">
         <span>Target: <span id="miniTargetName" class="mini-target-name">Auto</span></span>
-        <span id="miniTargetPath">~/Developer/bridge</span>
+        <span id="miniTargetPath">Searching...</span>
     </div>
 
     <!-- Full-Screen Activity & Dictation Cockpit Modal -->
@@ -1154,7 +1474,7 @@
             <div class="cockpit-input-row">
                 <textarea 
                     id="cockpitPrompt" 
-                    placeholder="Dictate prompt with Wispr Flow..." 
+                    placeholder="Dictate prompt or type..." 
                     rows="1" 
                     autocomplete="off" 
                     autocorrect="on" 
@@ -1175,7 +1495,7 @@
         <div class="banner-left">
             <div id="headerAgentDot" class="activity-dot"></div>
             <div class="banner-text-group">
-                <span id="headerAgentName" class="banner-agent-name">Antigravity — bridge</span>
+                <span id="headerAgentName" class="banner-agent-name">Auto-detect</span>
                 <span id="headerAgentStatus" class="banner-status-tag">Live Log ↗</span>
             </div>
         </div>
@@ -1189,7 +1509,7 @@
     <div class="editor-container">
         <textarea 
             id="prompt" 
-            placeholder="Dictate with Wispr Flow or type..." 
+            placeholder="Dictate prompt or type..." 
             autocomplete="off" 
             autocorrect="on" 
             spellcheck="true"
@@ -1237,6 +1557,7 @@
             <span id="sendSubtitle" class="send-btn-target">to Active Agent</span>
         </button>
     </div>
+    </div> <!-- /clientView -->
 
     <!-- History Bottom Sheet -->
     <div id="historyModal" class="modal-overlay">
@@ -1367,6 +1688,7 @@
             cockpitPrompt.value = promptEl.value;
             autoResize(cockpitPrompt);
             fetchActivityTail();
+            scheduleNextTailFetch(0);
             haptic(10);
         }
 
@@ -1374,6 +1696,7 @@
             cockpitModal.classList.remove('open');
             promptEl.value = cockpitPrompt.value;
             updateMetrics();
+            scheduleNextTailFetch(2000);
             haptic(10);
         }
 
@@ -1381,29 +1704,52 @@
         closeCockpitBtn.addEventListener('click', closeCockpit);
         refreshCockpitBtn.addEventListener('click', () => {
             fetchActivityTail();
+            scheduleNextTailFetch(500);
             haptic(10);
         });
 
         let activityAbortController = null;
         let isTailFetching = false;
+        let lastKnownIsBusy = false;
+        let tailTimer = null;
+
+        function scheduleNextTailFetch(delay = null) {
+            if (tailTimer) clearTimeout(tailTimer);
+            if (delay === null) {
+                const isCockpitOpen = cockpitModal && cockpitModal.classList.contains('open');
+                if (isCockpitOpen) {
+                    delay = 750; // Ultra-responsive 750ms when viewing live terminal
+                } else if (lastKnownIsBusy) {
+                    delay = 900; // 900ms when agent is busy executing
+                } else {
+                    delay = 2000; // 2s background cadence
+                }
+            }
+            tailTimer = setTimeout(async () => {
+                await fetchActivityTail();
+                scheduleNextTailFetch();
+            }, delay);
+        }
 
         async function fetchActivityTail() {
             if (isTailFetching) return;
+            if (isP2P && !isP2PReady) return;
             isTailFetching = true;
 
-            if (activityAbortController) {
-                activityAbortController.abort();
-            }
-            activityAbortController = new AbortController();
-
             try {
-                const targetId = selectedTargetId;
-                let data = null;
+                let targetId = selectedTargetId;
+                // If user selected 'focused', route tail to active terminal/agent to show real output
+                if (targetId === 'focused') {
+                    const altTarget = availableTargets.find(t => t.id !== 'focused');
+                    targetId = altTarget ? altTarget.id : 'auto';
+                }
 
+                let data = null;
                 if (isP2P) {
-                    if (!isP2PReady) return;
-                    data = await p2pRequest('get_tail', { target: targetId, lines: 40 });
+                    data = await p2pRequest('get_tail', { target: targetId, lines: 40 }, 4000);
                 } else {
+                    if (activityAbortController) activityAbortController.abort();
+                    activityAbortController = new AbortController();
                     const res = await fetch(`/terminal/tail?target=${encodeURIComponent(targetId)}&lines=40`, {
                         cache: 'no-store',
                         signal: activityAbortController.signal
@@ -1412,10 +1758,8 @@
                     data = await res.json();
                 }
 
-                if (targetId !== selectedTargetId) return;
-
-                if (data && data.success && data.content) {
-                    cockpitActivityContent.textContent = data.content;
+                if (data && data.success) {
+                    lastKnownIsBusy = Boolean(data.is_busy);
                     if (data.is_busy) {
                         headerAgentDot.classList.add('busy');
                         cockpitAgentDot.classList.add('busy');
@@ -1425,11 +1769,26 @@
                         cockpitAgentDot.classList.remove('busy');
                         if (headerAgentStatus) headerAgentStatus.textContent = 'Live Log ↗';
                     }
-                    if (data.target_name) {
+
+                    if (getResolvedTarget()) {
+                        updateActivityHeaderOptimistic();
+                    } else if (data.target_name) {
                         cockpitTargetTitle.textContent = data.target_name;
                         headerAgentName.textContent = data.target_name;
                     }
-                    cockpitActivityContent.scrollTop = cockpitActivityContent.scrollHeight;
+
+                    if (data.content && data.content.trim()) {
+                        if (cockpitActivityContent.textContent !== data.content) {
+                            cockpitActivityContent.textContent = data.content;
+                            cockpitActivityContent.scrollTop = cockpitActivityContent.scrollHeight;
+                        }
+                    } else {
+                        if (selectedTargetId === 'focused') {
+                            cockpitActivityContent.innerHTML = '<div class="activity-empty"><div style="font-weight:600;margin-bottom:4px;">Focused Window Active</div><div style="opacity:0.75;font-size:12px;">Prompts paste to your active Mac window. Select an agent or shell terminal below to monitor live logs.</div></div>';
+                        } else {
+                            cockpitActivityContent.innerHTML = '<div class="activity-empty">Terminal session idle (no recent output).</div>';
+                        }
+                    }
                 }
             } catch (e) {
                 if (e.name === 'AbortError') return;
@@ -1534,9 +1893,186 @@
             haptic(10);
         });
 
+        function compressAgentName(agentName, agentType) {
+            const raw = (agentName || agentType || '').trim();
+            if (!raw) return 'Shell';
+            const lower = raw.toLowerCase();
+            if (lower.includes('antigravity') || lower === 'agy') return 'AGY';
+            if (lower.includes('claude')) return 'Claude';
+            if (lower.includes('opencode')) return 'OpenCode';
+            if (lower.includes('codex')) return 'Codex';
+            if (lower.includes('aider')) return 'Aider';
+            if (lower.includes('ipython')) return 'IPython';
+            if (lower.includes('python')) return 'Python';
+            if (lower.includes('node')) return 'Node';
+            if (lower.includes('zsh')) return 'Zsh';
+            if (lower.includes('bash')) return 'Bash';
+            if (lower.includes('fish')) return 'Fish';
+            if (lower.includes('focused') || lower.includes('legacy') || lower.includes('active window')) return 'Mac';
+            if (lower.includes('terminal') || lower.includes('shell')) return 'Shell';
+            return raw;
+        }
+
+        function getTargetProject(target) {
+            if (!target) return '';
+            if (target.id === 'focused') return 'Active Window';
+            if (target.folder && target.folder !== '~') {
+                return target.folder;
+            }
+            const compact = (target.metadata && target.metadata.compact_cwd) || target.cwd || '';
+            if (target.folder === '~' || compact === '~') {
+                return 'Home (~)';
+            }
+            if (compact) {
+                const parts = compact.split('/').filter(Boolean);
+                if (parts.length) return parts[parts.length - 1];
+            }
+            return '';
+        }
+
+        function getTargetCompactPath(target) {
+            if (!target) return '';
+            if (target.id === 'focused') return 'Active Window';
+            if (target.metadata && target.metadata.compact_cwd) {
+                return target.metadata.compact_cwd;
+            }
+            if (target.folder === '~') return '~';
+            if (target.cwd) {
+                const match = target.cwd.match(/^\/Users\/[^\/]+(\/.*)?$/);
+                if (match) {
+                    return '~' + (match[1] || '');
+                }
+                return target.cwd;
+            }
+            return target.folder || '~';
+        }
+
+        function getTargetTty(target) {
+            if (!target || !target.tty) {
+                return (target && target.metadata && target.metadata.tty_short) ? target.metadata.tty_short : '';
+            }
+            return target.tty.replace('/dev/', '');
+        }
+
+        function getTargetDisplayInfo(t, targetsList) {
+            if (!t) {
+                return {
+                    title: 'Offline',
+                    agent: 'Offline',
+                    project: '',
+                    path: '--',
+                    badge: 'OFFLINE',
+                    cmd: '',
+                    bannerName: 'No Target',
+                    subtitle: 'No terminal target',
+                    hasCollision: false,
+                    instanceIndex: 1,
+                    instanceTotal: 1,
+                    locTag: ''
+                };
+            }
+            if (t.id === 'focused') {
+                return {
+                    title: 'Focused App',
+                    agent: 'Mac',
+                    project: 'Active Window',
+                    path: 'Active Window',
+                    badge: 'MAC',
+                    cmd: '',
+                    bannerName: 'Mac · Active Window',
+                    subtitle: 'Active application on Mac',
+                    hasCollision: false,
+                    instanceIndex: 1,
+                    instanceTotal: 1,
+                    locTag: ''
+                };
+            }
+
+            const agent = compressAgentName(t.agent_name, t.agent);
+            const project = getTargetProject(t);
+            const path = getTargetCompactPath(t);
+            const tty = getTargetTty(t);
+
+            const pool = Array.isArray(targetsList) ? targetsList : (availableTargets || []);
+            // Identify sibling targets that share the same agent and directory/project
+            const siblings = pool.filter(item => {
+                if (!item || item.id === 'focused') return false;
+                const a = compressAgentName(item.agent_name, item.agent);
+                const p = getTargetProject(item);
+                return a === agent && p === project;
+            });
+
+            const hasCollision = siblings.length > 1;
+            let instanceIndex = 1;
+            if (t.metadata && t.metadata.instance_index) {
+                instanceIndex = t.metadata.instance_index;
+            } else if (hasCollision) {
+                const sIdx = siblings.findIndex(s => s.id === t.id);
+                if (sIdx !== -1) instanceIndex = sIdx + 1;
+            }
+            const instanceTotal = (t.metadata && t.metadata.instance_total) || (hasCollision ? siblings.length : 1);
+
+            // Window and tab location tag if available
+            let locTag = '';
+            if (t.win_idx) {
+                locTag = `Win ${t.win_idx}`;
+                if (t.tab_idx && t.tab_idx > 1) {
+                    locTag += `, Tab ${t.tab_idx}`;
+                }
+            }
+
+            // Primary title: prominently the project folder / repository name!
+            // When colliding on same project, append the instance number: e.g. "bridge · #1", "bridge · #2"
+            let title = project || agent || t.name || 'Terminal';
+            if (hasCollision && project) {
+                title = `${project} · #${instanceIndex}`;
+            }
+
+            // Badge: e.g. "AGY #1 · ttys002" or "AGY · ttys002"
+            let badge = '';
+            if (hasCollision) {
+                badge = tty ? `${agent} #${instanceIndex} · ${tty}` : `${agent} #${instanceIndex}`;
+            } else {
+                badge = tty ? `${agent} · ${tty}` : agent;
+            }
+
+            // Command (omit if redundant with agent or shell)
+            const rawCmd = (t.metadata && t.metadata.short_cmd) || '';
+            const cmd = (rawCmd && rawCmd.toLowerCase() !== agent.toLowerCase() && rawCmd.toLowerCase() !== 'terminal' && rawCmd.toLowerCase() !== 'zsh' && rawCmd.toLowerCase() !== 'bash') ? rawCmd : '';
+
+            // Clean banner & subtitle display names
+            let bannerName = '';
+            let subtitle = '';
+            if (hasCollision) {
+                const idTag = tty ? ` (${tty})` : '';
+                bannerName = `${agent} #${instanceIndex} · ${project || path}${idTag}`;
+                subtitle = `${agent} #${instanceIndex} · ${project || path}${idTag}`;
+            } else {
+                bannerName = project ? `${agent} · ${project}` : (path !== '~' ? `${agent} · ${path}` : `${agent} (~)`);
+                subtitle = project ? `${agent} · ${project}` : `${agent} (${path})`;
+            }
+
+            return {
+                title,
+                agent,
+                project,
+                path,
+                tty,
+                badge,
+                cmd,
+                bannerName,
+                subtitle,
+                hasCollision,
+                instanceIndex,
+                instanceTotal,
+                locTag
+            };
+        }
+
         function getResolvedTarget() {
             if (selectedTargetId === 'auto') {
-                return availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') ||
+                return availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused' && !t.is_busy) ||
+                       availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') ||
                        availableTargets.find(t => t.id !== 'focused') ||
                        availableTargets[0] || null;
             }
@@ -1547,21 +2083,34 @@
             bentoGrid.innerHTML = '';
 
             // 1. Auto Tile (Full width on top)
-            const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') || availableTargets[0];
+            const autoResolved = availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused' && !t.is_busy) ||
+                                 availableTargets.find(t => t.agent && t.agent !== 'shell' && t.agent !== 'legacy' && t.id !== 'focused') ||
+                                 availableTargets.find(t => t.id !== 'focused') ||
+                                 availableTargets[0];
             const autoTile = document.createElement('div');
             autoTile.className = `bento-tile full-width ${selectedTargetId === 'auto' ? 'active' : ''}`;
-            const resolvedName = autoResolved ? (autoResolved.agent_name || autoResolved.name) : 'Searching...';
-            const resolvedPath = autoResolved ? ((autoResolved.metadata && autoResolved.metadata.compact_cwd) || autoResolved.folder || '~') : '';
-            
+
+            let autoRouteText = 'Searching for active agents...';
+            let autoBadgeText = 'AUTO';
+            if (autoResolved) {
+                const autoInfo = getTargetDisplayInfo(autoResolved, availableTargets);
+                autoBadgeText = autoInfo.hasCollision ? `AUTO · ${autoInfo.agent} #${autoInfo.instanceIndex}` : `AUTO · ${autoInfo.agent}`;
+                const autoRouteTarget = autoInfo.hasCollision
+                    ? `${autoInfo.project} #${autoInfo.instanceIndex} · ${autoInfo.agent}`
+                    : (autoInfo.project ? `${autoInfo.project} · ${autoInfo.agent}` : autoInfo.agent);
+                const autoIdTag = autoInfo.hasCollision && autoInfo.tty ? ` [${autoInfo.tty}]` : '';
+                autoRouteText = `Routing to ${autoRouteTarget}${autoIdTag}${autoInfo.path ? ' (' + autoInfo.path + ')' : ''}`;
+            }
+
             autoTile.innerHTML = `
                 <div class="tile-header">
                     <div class="tile-name-group">
                         <div class="tile-dot"></div>
                         <span class="tile-title">Auto-detect Agent</span>
                     </div>
-                    <span class="tile-badge">AUTO</span>
+                    <span class="tile-badge">${autoBadgeText}</span>
                 </div>
-                <div class="tile-path">Routing to ${resolvedName}${resolvedPath ? ' (' + resolvedPath + ')' : ''}</div>
+                <div class="tile-path">${autoRouteText}</div>
             `;
             autoTile.addEventListener('click', () => selectTarget('auto'));
             bentoGrid.appendChild(autoTile);
@@ -1572,10 +2121,7 @@
                 const isSelected = (selectedTargetId === t.id);
                 const isBusy = (t.status === 'busy' || t.is_busy);
                 const dotClass = isBusy ? 'tile-dot busy' : 'tile-dot';
-                const compactPath = (t.metadata && t.metadata.compact_cwd) || t.folder || '~';
-                const ttyStr = t.tty ? t.tty.replace('/dev/', '') : (t.metadata && t.metadata.tty_short ? t.metadata.tty_short : '');
-                const shortName = t.agent_name || t.name;
-                const cmdStr = (t.metadata && t.metadata.short_cmd) || t.cmd || '';
+                const info = getTargetDisplayInfo(t, availableTargets);
 
                 if (t.id === 'focused') {
                     tile.className = `bento-tile full-width ${isSelected ? 'active' : ''}`;
@@ -1591,16 +2137,17 @@
                     `;
                 } else {
                     tile.className = `bento-tile ${isSelected ? 'active' : ''}`;
+                    tile.title = `${t.display_name || info.title} (${info.path})${info.locTag ? ' [' + info.locTag + ']' : ''}`;
                     tile.innerHTML = `
                         <div class="tile-header">
                             <div class="tile-name-group">
                                 <div class="${dotClass}"></div>
-                                <span class="tile-title">${shortName}</span>
+                                <span class="tile-title">${info.title}</span>
                             </div>
-                            ${ttyStr ? `<span class="tile-badge">${ttyStr.toUpperCase()}</span>` : ''}
+                            <span class="tile-badge">${info.badge}</span>
                         </div>
-                        <div class="tile-path">${compactPath}</div>
-                        ${cmdStr ? `<div class="tile-cmd">${cmdStr}</div>` : ''}
+                        <div class="tile-path">${info.path}${info.locTag ? ' · ' + info.locTag : ''}</div>
+                        ${info.cmd ? `<div class="tile-cmd">${info.cmd}</div>` : ''}
                     `;
                 }
                 tile.addEventListener('click', () => selectTarget(t.id));
@@ -1617,20 +2164,24 @@
             if (selectedTargetId === 'focused') {
                 sendTitle.textContent = willEnter ? 'Paste & Enter on Mac' : 'Paste to Focused Window';
                 sendSubtitle.textContent = 'Active application on Mac';
-                miniTargetName.textContent = 'Focused App';
+                miniTargetName.textContent = 'Mac';
                 miniTargetPath.textContent = 'Active Window';
                 return;
             }
 
             if (resolved) {
-                let targetDisplay = resolved.name;
-                if (selectedTargetId === 'auto') {
-                    targetDisplay = `${resolved.agent_name || resolved.name}`;
-                }
+                const info = getTargetDisplayInfo(resolved, availableTargets);
                 sendTitle.textContent = 'Send Prompt';
-                sendSubtitle.textContent = `Route to ${targetDisplay}`;
-                miniTargetName.textContent = targetDisplay;
-                miniTargetPath.textContent = resolved.cwd || resolved.tty || '--';
+                if (selectedTargetId === 'auto') {
+                    sendSubtitle.textContent = `Auto → ${info.subtitle}`;
+                    miniTargetName.textContent = info.hasCollision ? `Auto · ${info.agent} #${info.instanceIndex}` : `Auto · ${info.title}`;
+                } else {
+                    sendSubtitle.textContent = `Route to ${info.subtitle}`;
+                    miniTargetName.textContent = info.hasCollision ? `${info.agent} #${info.instanceIndex} · ${info.project}` : `${info.agent} · ${info.title}`;
+                }
+                miniTargetPath.textContent = info.hasCollision && info.tty
+                    ? `${info.path} (${info.tty}${info.locTag ? ' · ' + info.locTag : ''})`
+                    : (info.path || resolved.tty || '--');
             } else {
                 sendTitle.textContent = 'Send Prompt';
                 sendSubtitle.textContent = 'No terminal target';
@@ -1642,9 +2193,27 @@
         function updateActivityHeaderOptimistic() {
             const resolved = getResolvedTarget();
             if (resolved) {
-                const name = (selectedTargetId === 'auto' ? (resolved.agent_name || resolved.name) : resolved.name) || 'Live Log';
-                if (headerAgentName) headerAgentName.textContent = name;
-                if (cockpitTargetTitle) cockpitTargetTitle.textContent = name;
+                const info = getTargetDisplayInfo(resolved, availableTargets);
+                let displayTitle = '';
+                if (selectedTargetId === 'focused') {
+                    displayTitle = 'Mac · Active Window';
+                } else if (selectedTargetId === 'auto') {
+                    displayTitle = `Auto · ${info.bannerName}`;
+                } else {
+                    displayTitle = info.bannerName;
+                }
+
+                if (headerAgentName) {
+                    headerAgentName.textContent = displayTitle;
+                    headerAgentName.title = resolved.display_name || info.path;
+                }
+                if (cockpitTargetTitle) {
+                    const cockpitTitle = (selectedTargetId === 'auto' ? 'Auto · ' : '') +
+                        `${info.bannerName}${info.path && info.path !== info.project ? ' (' + info.path + ')' : ''}`;
+                    cockpitTargetTitle.textContent = cockpitTitle;
+                    cockpitTargetTitle.title = resolved.display_name || info.path;
+                }
+
                 const isBusy = (resolved.status === 'busy' || resolved.is_busy);
                 if (isBusy) {
                     headerAgentDot.classList.add('busy');
@@ -1724,7 +2293,7 @@
                 }
 
                 const newSignature = JSON.stringify(availableTargets.map(t => [
-                    t.id, t.name, t.status, t.is_busy, t.cwd, t.cmd, t.tty
+                    t.id, t.name, t.folder, t.status, t.is_busy, t.cwd, t.cmd, t.tty, t.win_idx, t.tab_idx, (t.metadata && t.metadata.instance_index)
                 ]));
 
                 if (!force && newSignature === lastSignature) {
@@ -1815,7 +2384,7 @@
                     updateMetrics();
                 }
 
-                setTimeout(fetchActivityTail, 350);
+                scheduleNextTailFetch(150);
 
                 setTimeout(() => {
                     sendBtn.classList.remove('success');
@@ -1910,11 +2479,25 @@
 
         // Connection Security & Mode Indicator
         const connBadge = document.getElementById('connBadge');
-        const urlParams = new URLSearchParams(window.location.search);
-        const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
-        const p2pRoom = hashParams.get('room') || urlParams.get('room');
-        const p2pKey = hashParams.get('key') || urlParams.get('key');
-        const isP2P = Boolean(p2pRoom) || window.location.hostname.includes('github.io');
+        function getP2PMetadata() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+            const room = hashParams.get('room') || urlParams.get('room');
+            const key = hashParams.get('key') || urlParams.get('key');
+            const brokerRaw = hashParams.get('broker') || urlParams.get('broker');
+            const broker = brokerRaw !== null ? parseInt(brokerRaw, 10) : 0;
+            return {
+                room: room ? room.trim() : '',
+                key: key ? key.trim() : '',
+                broker: isNaN(broker) ? 0 : broker,
+                hasMetadata: Boolean(room && key)
+            };
+        }
+
+        let p2pMetadata = getP2PMetadata();
+        let p2pRoom = p2pMetadata.room;
+        let p2pKey = p2pMetadata.key;
+        let isP2P = p2pMetadata.hasMetadata;
 
         let mqttClient = null;
         let isP2PReady = false;
@@ -2007,7 +2590,23 @@
             });
         }
 
-        // WebCrypto E2EE Authenticated Encryption (CTR-HMAC-SHA256)
+        function hexToBytes(hex) {
+            const bytes = new Uint8Array(hex.length >> 1);
+            for (let i = 0; i < hex.length; i += 2) {
+                bytes[i >> 1] = parseInt(hex.substring(i, i + 2), 16);
+            }
+            return bytes;
+        }
+
+        function bytesToHex(bytes) {
+            let hex = '';
+            for (let i = 0; i < bytes.length; i++) {
+                hex += bytes[i].toString(16).padStart(2, '0');
+            }
+            return hex;
+        }
+
+        // High-Performance WebCrypto E2EE Authenticated Encryption (CTR-HMAC-SHA256)
         class E2EECryptoClient {
             constructor(rawKey) {
                 this.rawKey = rawKey;
@@ -2034,18 +2633,21 @@
                 crypto.getRandomValues(nonce);
 
                 const numBlocks = Math.ceil(data.length / 32);
-                const ksChunks = [];
+                const blockPromises = [];
                 for (let i = 0; i < numBlocks; i++) {
                     const ctr = new Uint8Array(20);
                     ctr.set(nonce, 0);
                     new DataView(ctr.buffer).setUint32(16, i, false);
-                    const block = await crypto.subtle.sign('HMAC', this.kEnc, ctr);
-                    ksChunks.push(new Uint8Array(block));
+                    blockPromises.push(crypto.subtle.sign('HMAC', this.kEnc, ctr));
                 }
+                const ksChunks = await Promise.all(blockPromises);
 
                 const totalKs = new Uint8Array(numBlocks * 32);
                 let off = 0;
-                for (const c of ksChunks) { totalKs.set(c, off); off += c.length; }
+                for (const c of ksChunks) {
+                    totalKs.set(new Uint8Array(c), off);
+                    off += c.byteLength;
+                }
 
                 const ct = new Uint8Array(data.length);
                 for (let i = 0; i < data.length; i++) {
@@ -2056,40 +2658,41 @@
                 macInput.set(nonce, 0);
                 macInput.set(ct, nonce.length);
                 const tagBytes = await crypto.subtle.sign('HMAC', this.kMac, macInput);
-                const toHex = arr => Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
-                return { nonce: toHex(nonce), ct: toHex(ct), tag: toHex(new Uint8Array(tagBytes)) };
+                return { nonce: bytesToHex(nonce), ct: bytesToHex(ct), tag: bytesToHex(new Uint8Array(tagBytes)) };
             }
 
             async decrypt(envelope) {
                 await this.readyPromise;
                 const dec = new TextDecoder();
-                const nonce = Uint8Array.from(envelope.nonce.match(/../g), b => parseInt(b, 16));
-                const ct = Uint8Array.from(envelope.ct.match(/../g), b => parseInt(b, 16));
+                const nonce = hexToBytes(envelope.nonce);
+                const ct = hexToBytes(envelope.ct);
 
                 const macInput = new Uint8Array(nonce.length + ct.length);
                 macInput.set(nonce, 0);
                 macInput.set(ct, nonce.length);
                 const tagBytes = await crypto.subtle.sign('HMAC', this.kMac, macInput);
-                const toHex = arr => Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
-                const expectedTag = toHex(new Uint8Array(tagBytes));
+                const expectedTag = bytesToHex(new Uint8Array(tagBytes));
 
                 if (expectedTag !== envelope.tag) {
                     throw new Error('MAC verification failed - message tampered');
                 }
 
                 const numBlocks = Math.ceil(ct.length / 32);
-                const ksChunks = [];
+                const blockPromises = [];
                 for (let i = 0; i < numBlocks; i++) {
                     const ctr = new Uint8Array(20);
                     ctr.set(nonce, 0);
                     new DataView(ctr.buffer).setUint32(16, i, false);
-                    const block = await crypto.subtle.sign('HMAC', this.kEnc, ctr);
-                    ksChunks.push(new Uint8Array(block));
+                    blockPromises.push(crypto.subtle.sign('HMAC', this.kEnc, ctr));
                 }
+                const ksChunks = await Promise.all(blockPromises);
 
                 const totalKs = new Uint8Array(numBlocks * 32);
                 let off = 0;
-                for (const c of ksChunks) { totalKs.set(c, off); off += c.length; }
+                for (const c of ksChunks) {
+                    totalKs.set(new Uint8Array(c), off);
+                    off += c.byteLength;
+                }
 
                 const pt = new Uint8Array(ct.length);
                 for (let i = 0; i < ct.length; i++) {
@@ -2101,48 +2704,140 @@
 
         // Native Zero-Dependency MQTT v3.1.1 WebSocket Client
         class NanoMQTTWS {
-            constructor(brokers, clientId, onMessage, onConnect, onDisconnect) {
+            constructor(brokers, clientId, onMessage, onConnect, onDisconnect, preferredBrokerIdx = 0) {
                 this.brokers = Array.isArray(brokers) ? brokers : [brokers];
-                this.brokerIdx = 0;
+                this.brokerIdx = preferredBrokerIdx % this.brokers.length;
+                this.activeBrokerIdx = this.brokerIdx;
+                this.consecutiveFailures = 0;
                 this.clientId = clientId;
                 this.onMessage = onMessage;
                 this.onConnect = onConnect;
                 this.onDisconnect = onDisconnect;
                 this.ws = null;
                 this.pingTimer = null;
+                this.pingWatchdog = null;
+                this.connectTimeout = null;
+                this.reconnectTimer = null;
+                this.isConnack = false;
+                this.subscriptions = new Set();
                 this.enc = new TextEncoder();
                 this.dec = new TextDecoder();
                 this.connect();
             }
 
-            connect() {
+            isConnected() {
+                return this.ws !== null && this.ws.readyState === WebSocket.OPEN && this.isConnack;
+            }
+
+            _cleanup() {
                 if (this.ws) {
-                    try { this.ws.close(); } catch(e) {}
+                    try {
+                        this.ws.onopen = null;
+                        this.ws.onmessage = null;
+                        this.ws.onerror = null;
+                        this.ws.onclose = null;
+                        this.ws.close();
+                    } catch (e) {}
                     this.ws = null;
                 }
-                clearInterval(this.pingTimer);
+                if (this.connectTimeout) {
+                    clearTimeout(this.connectTimeout);
+                    this.connectTimeout = null;
+                }
+                if (this.pingTimer) {
+                    clearInterval(this.pingTimer);
+                    this.pingTimer = null;
+                }
+                if (this.pingWatchdog) {
+                    clearTimeout(this.pingWatchdog);
+                    this.pingWatchdog = null;
+                }
+                if (this.reconnectTimer) {
+                    clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = null;
+                }
+            }
+
+            connect() {
+                this._cleanup();
+                const wasConnected = this.isConnack;
+                this.isConnack = false;
+
                 const item = this.brokers[this.brokerIdx % this.brokers.length];
                 const url = typeof item === 'string' ? item : item.url;
                 this.username = (typeof item === 'object' && item.username) ? item.username : null;
                 this.password = (typeof item === 'object' && item.password) ? item.password : null;
 
                 try {
-                    this.ws = new WebSocket(url, ['mqtt']);
-                    this.ws.binaryType = 'arraybuffer';
-                    this.ws.onopen = () => this._sendConnect();
-                    this.ws.onmessage = (e) => this._handleMessage(new Uint8Array(e.data));
-                    this.ws.onclose = () => {
-                        clearInterval(this.pingTimer);
-                        if (this.onDisconnect) this.onDisconnect();
-                        this.brokerIdx++;
-                        setTimeout(() => this.connect(), 2000);
+                    const socket = new WebSocket(url, ['mqtt']);
+                    this.ws = socket;
+                    socket.binaryType = 'arraybuffer';
+
+                    // 8-second connect watchdog
+                    this.connectTimeout = setTimeout(() => {
+                        if (this.ws === socket && !this.isConnack) {
+                            try { socket.close(); } catch(e) {}
+                        }
+                    }, 8000);
+
+                    socket.onopen = () => {
+                        if (this.ws !== socket) return;
+                        this._sendConnect();
                     };
-                    this.ws.onerror = () => {
-                        try { this.ws.close(); } catch(e) {}
+
+                    socket.onmessage = (e) => {
+                        if (this.ws !== socket) return;
+                        this._handleMessage(new Uint8Array(e.data));
+                    };
+
+                    socket.onclose = () => {
+                        if (this.ws !== socket) return;
+                        this._handleDisconnect();
+                    };
+
+                    socket.onerror = () => {
+                        if (this.ws !== socket) return;
+                        try { socket.close(); } catch(e) {}
                     };
                 } catch(e) {
-                    this.brokerIdx++;
-                    setTimeout(() => this.connect(), 2000);
+                    this._handleDisconnect();
+                }
+            }
+
+            _handleDisconnect() {
+                const hadConnection = this.isConnack;
+                this._cleanup();
+                this.isConnack = false;
+                if (this.onDisconnect && hadConnection) {
+                    this.onDisconnect();
+                }
+
+                if (hadConnection) {
+                    // Previous broker was healthy; stay on the same broker
+                    this.brokerIdx = this.activeBrokerIdx;
+                    this.consecutiveFailures = 0;
+                } else {
+                    this.consecutiveFailures++;
+                    if (this.consecutiveFailures >= 3) {
+                        this.brokerIdx = (this.brokerIdx + 1) % this.brokers.length;
+                        this.consecutiveFailures = 0;
+                    } else {
+                        this.brokerIdx = this.activeBrokerIdx;
+                    }
+                }
+
+                this.reconnectTimer = setTimeout(() => this.connect(), 1500);
+            }
+
+            reconnect(force = false) {
+                if (force || !this.isConnected()) {
+                    if (this.reconnectTimer) {
+                        clearTimeout(this.reconnectTimer);
+                        this.reconnectTimer = null;
+                    }
+                    this.brokerIdx = this.activeBrokerIdx;
+                    this.consecutiveFailures = 0;
+                    this.connect();
                 }
             }
 
@@ -2204,7 +2899,7 @@
                 this.ws.send(pkt);
             }
 
-            subscribe(topic) {
+            _sendSubscribe(topic) {
                 if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
                 const top = this.enc.encode(topic);
                 const payload = new Uint8Array(2 + 2 + top.length + 1);
@@ -2218,6 +2913,13 @@
                 pkt.set(lenBytes, 1);
                 pkt.set(payload, 1 + lenBytes.length);
                 this.ws.send(pkt);
+            }
+
+            subscribe(topic) {
+                this.subscriptions.add(topic);
+                if (this.isConnected()) {
+                    this._sendSubscribe(topic);
+                }
             }
 
             publish(topic, payloadStr) {
@@ -2237,14 +2939,41 @@
             }
 
             _handleMessage(buf) {
+                if (this.pingWatchdog) {
+                    clearTimeout(this.pingWatchdog);
+                    this.pingWatchdog = null;
+                }
                 const cmd = buf[0] & 0xf0;
                 if (cmd === 0x20) {
-                    clearInterval(this.pingTimer);
+                    if (this.connectTimeout) {
+                        clearTimeout(this.connectTimeout);
+                        this.connectTimeout = null;
+                    }
+                    this.isConnack = true;
+                    this.activeBrokerIdx = this.brokerIdx;
+                    this.consecutiveFailures = 0;
+
+                    // Re-subscribe all active topics automatically
+                    for (const topic of this.subscriptions) {
+                        this._sendSubscribe(topic);
+                    }
+
+                    // Watchdog heartbeat every 15s; disconnect if no response within 6s
+                    if (this.pingTimer) clearInterval(this.pingTimer);
                     this.pingTimer = setInterval(() => {
                         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                            this.ws.send(new Uint8Array([0xC0, 0x00]));
+                            try {
+                                this.ws.send(new Uint8Array([0xC0, 0x00]));
+                                if (this.pingWatchdog) clearTimeout(this.pingWatchdog);
+                                this.pingWatchdog = setTimeout(() => {
+                                    this.reconnect(true);
+                                }, 6000);
+                            } catch (e) {
+                                this.reconnect(true);
+                            }
                         }
-                    }, 20000);
+                    }, 15000);
+
                     if (this.onConnect) this.onConnect();
                 } else if (cmd === 0x30) {
                     const { length: remLen, nextOffset: headerEnd } = this._decodeLength(buf, 1);
@@ -2268,6 +2997,8 @@
                     'wss://broker.emqx.io:8084/mqtt'
                 ];
                 const clientId = 'phone_' + Math.random().toString(16).slice(2, 10);
+                const meta = getP2PMetadata();
+                const preferredBroker = meta.broker !== null ? meta.broker : 0;
                 mqttClient = new NanoMQTTWS(
                     brokers,
                     clientId,
@@ -2300,14 +3031,27 @@
                         isP2PReady = false;
                         statusDot.classList.add('offline');
                         updateConnectionBadge('p2p_offline');
-                    }
+                    },
+                    preferredBroker
                 );
             } catch (e) {
                 console.error('P2P relay init error:', e);
             }
         }
 
-        async function p2pRequest(action, params = {}, timeoutMs = 15000) {
+        function clearPendingP2PRequests(reason = 'Disconnected') {
+            isTargetsFetching = false;
+            isTailFetching = false;
+            for (const [id, req] of pendingRequests.entries()) {
+                if (req.timeout) clearTimeout(req.timeout);
+                if (req.reject) {
+                    try { req.reject(new Error(reason)); } catch (e) {}
+                }
+            }
+            pendingRequests.clear();
+        }
+
+        async function p2pRequest(action, params = {}, timeoutMs = 12000) {
             if (!mqttClient || !isP2PReady || !p2pCrypto) {
                 throw new Error('P2P not connected');
             }
@@ -2327,7 +3071,12 @@
                     resolve: (data) => {
                         clearTimeout(timeout);
                         resolve(data);
-                    }
+                    },
+                    reject: (err) => {
+                        clearTimeout(timeout);
+                        reject(err);
+                    },
+                    timeout
                 });
 
                 mqttClient.publish(`pb/${p2pRoom}/mac`, JSON.stringify(encryptedEnvelope));
@@ -2335,17 +3084,43 @@
         }
 
         // Instant reconnection when phone unlocks, wakes up from sleep, or tab regains focus
+        let lastWakeupTime = 0;
         function handleMobileWakeup() {
+            const now = Date.now();
+            if (now - lastWakeupTime < 1000) return; // Debounce wake storm
+            lastWakeupTime = now;
+
             consecutivePingFails = 0;
-            ping();
-            fetchTargets(false);
+            if (isP2P) {
+                clearPendingP2PRequests('Device resumed');
+                if (mqttClient) {
+                    mqttClient.reconnect(true);
+                }
+            } else {
+                ping();
+                fetchTargets(false);
+                fetchActivityTail();
+            }
         }
+
+        // Timer drift detection for suspended mobile runtimes (screen lock)
+        let lastSleepWatchdogTick = Date.now();
+        setInterval(() => {
+            const now = Date.now();
+            const elapsed = now - lastSleepWatchdogTick;
+            lastSleepWatchdogTick = now;
+            if (elapsed > 3500) {
+                // OS suspended JavaScript execution during screen lock / deep sleep
+                handleMobileWakeup();
+            }
+        }, 1500);
 
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 handleMobileWakeup();
             }
         });
+        window.addEventListener('pageshow', handleMobileWakeup);
         window.addEventListener('focus', handleMobileWakeup);
         window.addEventListener('online', handleMobileWakeup);
 
@@ -2362,18 +3137,80 @@
             }
         } catch (e) {}
 
-        updateViewportHeight();
-        if (isP2P && p2pRoom && p2pKey) {
-            initP2PRelay(p2pRoom, p2pKey);
-        } else {
-            fetchTargets(true);
+        // Copy command handlers for landing page
+        function copyLandingText(text, copyEl) {
+            navigator.clipboard.writeText(text).then(() => {
+                if (copyEl) {
+                    copyEl.textContent = 'Copied';
+                    copyEl.classList.add('copied');
+                    setTimeout(() => {
+                        copyEl.textContent = 'Copy';
+                        copyEl.classList.remove('copied');
+                    }, 2000);
+                }
+            }).catch(() => {});
         }
-        ping();
-        fetchActivityTail();
-        setInterval(ping, 4000);
-        setInterval(() => fetchTargets(false), 5000);
-        setInterval(fetchActivityTail, 2500);
-        updateMetrics();
+
+        const landingCloneChip = document.getElementById('landingCloneChip');
+        const landingCloneCopy = document.getElementById('landingCloneCopy');
+        if (landingCloneChip) {
+            landingCloneChip.addEventListener('click', () => {
+                copyLandingText('git clone https://github.com/OmikAcharya/bridge.git', landingCloneCopy);
+            });
+        }
+
+        const landingDaemonChip = document.getElementById('landingDaemonChip');
+        const landingDaemonCopy = document.getElementById('landingDaemonCopy');
+        if (landingDaemonChip) {
+            landingDaemonChip.addEventListener('click', () => {
+                copyLandingText('python3 -m bridge.server', landingDaemonCopy);
+            });
+        }
+
+        let pollingIntervalsStarted = false;
+        function startPolling() {
+            if (pollingIntervalsStarted) return;
+            pollingIntervalsStarted = true;
+            if (!isP2P) {
+                fetchTargets(true);
+                ping();
+            }
+            setInterval(ping, 4000);
+            setInterval(() => fetchTargets(false), 5000);
+            scheduleNextTailFetch(300);
+        }
+
+        function routeInit() {
+            updateViewportHeight();
+            const meta = getP2PMetadata();
+            p2pRoom = meta.room;
+            p2pKey = meta.key;
+            isP2P = meta.hasMetadata;
+
+            const landingViewEl = document.getElementById('landingView');
+            const clientViewEl = document.getElementById('clientView');
+
+            if (isP2P) {
+                // Connected route with P2P metadata: show client and activate tunnel
+                if (landingViewEl) landingViewEl.style.display = 'none';
+                if (clientViewEl) clientViewEl.style.display = 'flex';
+                initP2PRelay(p2pRoom, p2pKey);
+                startPolling();
+            } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.search.includes('client=1')) {
+                // Local loopback daemon or explicit client query: show client and poll daemon
+                if (landingViewEl) landingViewEl.style.display = 'none';
+                if (clientViewEl) clientViewEl.style.display = 'flex';
+                startPolling();
+            } else {
+                // Base URL / on GitHub Pages or external host without P2P metadata: show minimal lander!
+                if (landingViewEl) landingViewEl.style.display = 'flex';
+                if (clientViewEl) clientViewEl.style.display = 'none';
+            }
+            updateMetrics();
+        }
+
+        routeInit();
+        window.addEventListener('hashchange', routeInit);
     </script>
 </body>
 </html>
